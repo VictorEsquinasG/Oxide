@@ -6,7 +6,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UdpSocket;
 
 use crate::app::AppState;
-use crate::packet::{Packet, PacketPayload, ControlMessage};
+use crate::packet::{ControlMessage, Packet, PacketPayload};
 
 /// NetworkNode manages the bridge between the physical network (UDP)
 /// and the virtual network (TAP interface)
@@ -68,6 +68,8 @@ impl NetworkNode {
         let start = tokio::time::Instant::now();
         let timeout = tokio::time::Duration::from_secs(5);
 
+        self.auto_ping();
+
         loop {
             // Check for shutdown request
             if shutdown.load(Ordering::Relaxed) {
@@ -77,6 +79,19 @@ impl NetworkNode {
             // Check for timeout
             if !self.state.connected.load(Ordering::Relaxed) && start.elapsed() > timeout {
                 self.state.log("❌ Connection failed (timeout)".into());
+                return Ok(());
+            }
+            // Check for real disconnection
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+
+            let last_seen = self.state.last_seen.load(Ordering::Relaxed);
+
+            if self.state.connected.load(Ordering::Relaxed) && now.saturating_sub(last_seen) > 6 {
+                self.state.connected.store(false, Ordering::Relaxed);
+                self.state.log("❌ Peer not responding (timeout)".into());
                 return Ok(());
             }
 
@@ -117,6 +132,7 @@ impl NetworkNode {
                                 Ok(p) => p,
                                 Err(_) => return Err(anyhow::anyhow!("Packet decode failed")),
                             };
+                            self.state.update_last_seen();
 
                             match packet.payload {
                                 PacketPayload::Control(msg) => {
@@ -161,6 +177,29 @@ impl NetworkNode {
             }
         }
         Ok(())
+    }
+
+    fn auto_ping(&self) -> () {
+        let socket = self.socket.clone();
+        let peer = self.peer;
+        let state = self.state.clone();
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(2));
+
+            loop {
+                interval.tick().await;
+
+                if state.shutdown.load(Ordering::Relaxed) {
+                    break;
+                }
+
+                if state.connected.load(Ordering::Relaxed) {
+                    let ping = Packet::ping();
+                    let _ = socket.send_to(&ping.encode(), peer).await;
+                }
+            }
+        });
     }
 
     /// The main loop that bridges the traffic

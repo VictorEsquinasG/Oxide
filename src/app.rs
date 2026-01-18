@@ -1,31 +1,45 @@
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Default)]
 pub struct AppState {
     pub my_ip: String,
-    pub peer_ip: String,
-    pub peer_port: String,  // optional
-    pub virtual_ip: String, // IP inside VPN
+
+    pub peer_ip: Arc<Mutex<String>>,
+    pub peer_port: Arc<Mutex<String>>, // optional
+    pub virtual_ip: String,            // IP inside VPN
+
     pub connected: Arc<AtomicBool>,
     pub shutdown: Arc<AtomicBool>,
     pub connection_handle: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
+    pub last_seen: AtomicU64,
     pub logs: Arc<Mutex<Vec<String>>>,
 }
 
 impl AppState {
-    pub fn new(my_ip: String) -> Self {
+    pub fn new(my_ip: String, peer_port: String) -> Self {
         Self {
             my_ip,
-            peer_ip: String::new(),
-            peer_port: "9000".to_string(),
+            peer_ip: Arc::new(Mutex::new(String::new())),
+            peer_port: Arc::new(Mutex::new(peer_port)),
             virtual_ip: "10.0.0.1".to_string(),
             connected: Arc::new(AtomicBool::new(false)),
             shutdown: Arc::new(AtomicBool::new(false)),
             connection_handle: Arc::new(Mutex::new(None)),
             logs: Arc::new(Mutex::new(Vec::new())),
+            last_seen: AtomicU64::new(0),
             ..Default::default()
         }
+    }
+
+    pub fn update_last_seen(&self) {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        self.last_seen.store(now, Ordering::Relaxed);
     }
 
     pub fn log(&self, message: String) {

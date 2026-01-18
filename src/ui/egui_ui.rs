@@ -6,20 +6,30 @@ use std::sync::atomic::Ordering;
 use tokio::runtime::Runtime;
 
 use crate::app::AppState;
+use std::sync::Arc;
 use crate::network::node::NetworkNode;
 use crate::packet::Packet;
 
+#[derive(Default)]
+pub struct UiState {
+    pub peer_ip: String,
+    pub peer_port: String,
+    pub virtual_ip: String,
+}
+
 pub struct EguiApp {
-    pub state: AppState,
+    pub state: Arc<AppState>,
+    pub ui: UiState,
     pub power_on_texture: Option<egui::TextureHandle>,
     pub power_off_texture: Option<egui::TextureHandle>,
 }
 
 impl EguiApp {
     // Constructor to initialize the app with empty textures
-    pub fn new(state: AppState) -> Self {
+    pub fn new(state: Arc<AppState>) -> Self {
         Self {
             state,
+            ui: UiState::default(),
             power_on_texture: None,
             power_off_texture: None,
         }
@@ -103,10 +113,10 @@ impl App for EguiApp {
             // ===================== DATA FORM =====================
             ui.horizontal(|ui| {
                 ui.label("Peer IP:");
-                ui.text_edit_singleline(&mut self.state.peer_ip);
+                ui.text_edit_singleline(&mut self.ui.peer_ip);
 
                 ui.label("Port:");
-                ui.text_edit_singleline(&mut self.state.peer_port);
+                ui.text_edit_singleline(&mut self.ui.peer_port);
             });       
 
             if ui.button("Exit").clicked() {

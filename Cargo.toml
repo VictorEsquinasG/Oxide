@@ -14,3 +14,5 @@ eframe = "0.26"              # egui framework for multiplatform GUI
 egui = "0.26"
 image = "0.24"
 tun = { version = "0.6", features = ["async"]}
+tray-icon = "0.11"
+winit = "0.29"               # eframe uses it internaly but we need it explicit
