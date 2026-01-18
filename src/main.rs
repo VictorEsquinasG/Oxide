@@ -7,6 +7,7 @@ mod ui;
 
 use egui::IconData;
 use local_ip_address::local_ip;
+use network::node::NetworkNode;
 use std::sync::Arc;
 use ui::egui_ui::{EguiApp, UiState};
 
@@ -17,8 +18,14 @@ fn load_icon() -> IconData {
         let image = image::load_from_memory(include_bytes!("../assets/Icon.png"))
             .expect("No se pudo cargar el icono (assets/Icon.png)")
             .into_rgba8();
-        let (width, height) = image.dimensions();
-        (image.into_raw(), width, height)
+
+        // Resize to 32x32 if needed
+        let resized =
+            image::imageops::resize(&image, 32, 32, image::imageops::FilterType::Lanczos3);
+
+        let (width, height) = resized.dimensions();
+        let rgba = resized.into_raw();
+        (rgba, width, height)
     };
 
     IconData {
@@ -28,19 +35,35 @@ fn load_icon() -> IconData {
     }
 }
 
-fn main() -> eframe::Result<()> {
+#[tokio::main]
+async fn main() -> eframe::Result<()> {
     let my_ip = local_ip().unwrap_or_else(|_| "0.0.0.0".parse().unwrap());
     // ===================== GLOBAL STATE =====================
     let state = Arc::new(app::AppState::new(my_ip.to_string(), "9000".to_string()));
     // ===================== SYSTEM TRAY =====================
-    let _tray = tray::spawn_tray(state.clone());
+    let _tray = tray::node::spawn_tray(state.clone());
     // ===================== UI STATE =====================
     let ui_state = UiState {
         peer_ip: String::new(),
         peer_port: "9000".to_string(),
         virtual_ip: "10.0.0.1".to_string(),
     };
-    // ===================== APP =====================
+
+    // --------------------- NetworkNode ---------------------
+    let peer_addr: std::net::SocketAddr = "192.168.1.100:9000".parse().unwrap(); // IP del peer
+    let bind_addr: std::net::SocketAddr = "0.0.0.0:9000".parse().unwrap(); // Tu IP local UDP
+
+    let node = NetworkNode::new(bind_addr, peer_addr, state.clone(), "10.0.0.1")
+        .await
+        .expect("Failed to create NetworkNode");
+
+    let shutdown = state.shutdown.clone();
+    tokio::spawn(async move {
+        node.run(shutdown).await.unwrap();
+    });
+    // -------------------------------------------------------
+
+    // ===================== GUI APP =====================
     let app = EguiApp {
         state: state.clone(),
         // state: app::AppState::new(my_ip.to_string()),

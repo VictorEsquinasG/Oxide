@@ -45,6 +45,10 @@ impl NetworkNode {
         config.platform(|config| {
             config.packet_information(true); // Linux specific header handling
         });
+        #[cfg(target_os = "windows")]
+        config.platform(|config| {
+            // config.name("Ethernet");
+        });
         let tun_device = tun::create_as_async(&config)?;
         let tun_device = Arc::new(tokio::sync::Mutex::new(tun_device));
 
@@ -60,6 +64,10 @@ impl NetworkNode {
     pub async fn run(&self, shutdown: Arc<AtomicBool>) -> anyhow::Result<()> {
         let mut buf_tun = [0u8; 4096]; // Buffer for reading from Visual Interface
         let mut buf_udp = [0u8; 4096]; // Buffer for reading from Physical Interface
+
+        let ping_interval = tokio::time::Duration::from_secs(2);
+        let ping_timeout = tokio::time::Duration::from_secs(5);
+        let mut last_ping = tokio::time::Instant::now();
 
         self.state.log("🤝 Sending HELLO".into());
         let hello = Packet::hello();
@@ -95,85 +103,46 @@ impl NetworkNode {
                 return Ok(());
             }
 
+            // Enviar PING periódicamente
+            if self.state.connected.load(Ordering::Relaxed) && last_ping.elapsed() > ping_interval {
+                let ping = Packet::ping();
+                let _ = self.socket.send_to(&ping.encode(), self.peer).await;
+                last_ping = tokio::time::Instant::now();
+            }
+
             // Use tokio select to handle whichever comes first:
             // 1. The game sends a packet (Read from TUN)
             // 2. The peer sends a packet (Read from UDP)
-            tokio::select! {
-                // A. - Outbound: TAP -> UDP
-                // Lock TUN device to read
-                res = async {
-                    let mut locket_dev = self.tun_device.lock().await;
-                    locket_dev.read(&mut buf_tun).await
-                } => {
-                match res {
-                    Ok(n) => {
-                        // Wrap the raw frame in our Packet structure
-                        let packet = Packet::data(buf_tun[..n].to_vec());
-                        // Serialize (and encrypt in the future)
-                        let encoded = bincode::serialize(&packet)?;
-                        // Send over UDP
-                        let _ = self.socket.send_to(&encoded, self.peer).await?;
-                    }
-                    Err(e) => {
-                        eprint!("Error reading from TUN device: {}", e);
-                    }
-                }
-                }
-
-                // B. - Inbound: UDP -> TAP
-                res = self.socket.recv_from(&mut buf_udp) => {
-                    match res {
-                        Ok((n, src_addr)) => {
-                            if src_addr != self.peer {
-                                return Ok(());
-                            }
-
-                            let packet = match Packet::decode(&buf_udp[..n]) {
-                                Ok(p) => p,
-                                Err(_) => return Err(anyhow::anyhow!("Packet decode failed")),
-                            };
-                            self.state.update_last_seen();
-
-                            match packet.payload {
-                                PacketPayload::Control(msg) => {
-                                    match msg {
-                                        ControlMessage::Hello => {
-                                            self.state.log("👋 HELLO received".into());
-                                            let ack = Packet::hello_ack();
-                                            let _ = self.socket.send_to(&ack.encode(), self.peer).await;
-                                        }
-
-                                        ControlMessage::HelloAck => {
-                                            if !self.state.connected.load(Ordering::Relaxed) {
-                                                self.state.connected.store(true, Ordering::Relaxed);
-                                                self.state.log("✅ Connected!".into());
-                                            }
-                                        }
-
-                                        ControlMessage::Ping => {
-                                            let pong = Packet::pong();
-                                            let _ = self.socket.send_to(&pong.encode(), self.peer).await;
-                                        }
-
-                                        ControlMessage::Pong => {
-                                            self.state.log("🏓 Pong received".into());
-                                        }
-                                    }
+            if let Ok((n, src)) = self.socket.try_recv_from(&mut buf_udp) {
+                if src == self.peer {
+                    if let Ok(packet) = Packet::decode(&buf_udp[..n]) {
+                        match packet.payload {
+                            PacketPayload::Control(msg) => match msg {
+                                ControlMessage::Hello => {
+                                    self.state.log("👋 HELLO received".into());
+                                    let ack = Packet::hello_ack();
+                                    let _ = self.socket.send_to(&ack.encode(), self.peer).await;
                                 }
-
-                                PacketPayload::Data(frame) => {
-                                    let mut dev = self.tun_device.lock().await;
-                                    let _ = dev.write_all(&frame).await;
+                                ControlMessage::HelloAck => {
+                                    self.state.connected.store(true, Ordering::Relaxed);
+                                    self.state.log("✅ Connected (HELLO_ACK)".into());
                                 }
+                                ControlMessage::Ping => {
+                                    let pong = Packet::pong();
+                                    let _ = self.socket.send_to(&pong.encode(), self.peer).await;
+                                }
+                                ControlMessage::Pong => {
+                                    self.state.update_last_seen();
+                                    self.state.log("🏓 Pong received".into());
+                                }
+                            },
+                            PacketPayload::Data(frame) => {
+                                let mut dev = self.tun_device.lock().await;
+                                let _ = dev.write_all(&frame).await;
                             }
                         }
-
-                        Err(e) => {
-                            eprintln!("UDP recv error: {}", e);
-                        }
                     }
                 }
-
             }
         }
         Ok(())
