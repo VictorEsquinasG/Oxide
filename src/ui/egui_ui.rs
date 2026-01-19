@@ -1,20 +1,15 @@
 use eframe::egui; // Import egui to use TextureOptions and ColorImage
 use eframe::App;
-use local_ip_address::local_ip;
-use std::net::SocketAddr;
 use std::sync::atomic::Ordering;
-use tokio::runtime::Runtime;
 
 use crate::app::AppState;
 use std::sync::Arc;
 use crate::network::node::NetworkNode;
-use crate::packet::Packet;
 
 #[derive(Default)]
 pub struct UiState {
     pub peer_ip: String,
     pub peer_port: String,
-    pub virtual_ip: String,
 }
 
 pub struct EguiApp {
@@ -66,13 +61,58 @@ impl EguiApp {
 
     fn toggle_connection(&mut self) {
         if self.state.connected.load(Ordering::Relaxed) {
+            // Disconnect
             self.state.shutdown.store(true, Ordering::Relaxed);
             self.state.connected.store(false, Ordering::Relaxed);
-            self.state.log("Disconnected".into());
+            self.state.log("🛑 Disconnecting...".into());
         } else {
-            self.state.shutdown.store(false, Ordering::Relaxed);
-            self.state.connected.store(true, Ordering::Relaxed);
-            self.state.log("Connecting...".into());
+            // Connect
+            if self.ui.peer_ip.is_empty() {
+                self.state.log("❌ Peer IP cannot be empty".into());
+                return;
+            }
+
+            let peer_ip = self.ui.peer_ip.clone();
+            let peer_port = self.ui.peer_port.clone();
+            let state = self.state.clone();
+
+            self.state.log(format!("🔌 Connecting to {}:{}", peer_ip, peer_port));
+
+            // Spawn connection task
+            tokio::spawn(async move {
+                let peer_addr: String = format!("{}:{}", peer_ip, peer_port);
+                let bind_addr = "0.0.0.0:9000";
+
+                match peer_addr.parse::<std::net::SocketAddr>() {
+                    Ok(peer_socket) => {
+                        match bind_addr.parse::<std::net::SocketAddr>() {
+                            Ok(bind_socket) => {
+                                match NetworkNode::new(bind_socket, peer_socket, state.clone(), "10.0.0.1")
+                                    .await
+                                {
+                                    Ok(node) => {
+                                        state.log("✅ NetworkNode created".into());
+                                        let shutdown = state.shutdown.clone();
+                                        state.shutdown.store(false, Ordering::Relaxed);
+                                        if let Err(e) = node.run(shutdown).await {
+                                            state.log(format!("❌ Connection error: {}", e));
+                                        }
+                                    }
+                                    Err(e) => {
+                                        state.log(format!("❌ Failed to create NetworkNode: {}", e));
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                state.log(format!("❌ Invalid bind address: {}", e));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        state.log(format!("❌ Invalid peer address: {}", e));
+                    }
+                }
+            });
         }
     }
 }

@@ -7,7 +7,6 @@ mod ui;
 
 use egui::IconData;
 use local_ip_address::local_ip;
-use network::node::NetworkNode;
 use std::sync::Arc;
 use ui::egui_ui::{EguiApp, UiState};
 
@@ -46,27 +45,11 @@ async fn main() -> eframe::Result<()> {
     let ui_state = UiState {
         peer_ip: String::new(),
         peer_port: "9000".to_string(),
-        virtual_ip: "10.0.0.1".to_string(),
     };
-
-    // --------------------- NetworkNode ---------------------
-    let peer_addr: std::net::SocketAddr = "192.168.1.100:9000".parse().unwrap(); // IP del peer
-    let bind_addr: std::net::SocketAddr = "0.0.0.0:9000".parse().unwrap(); // Tu IP local UDP
-
-    let node = NetworkNode::new(bind_addr, peer_addr, state.clone(), "10.0.0.1")
-        .await
-        .expect("Failed to create NetworkNode");
-
-    let shutdown = state.shutdown.clone();
-    tokio::spawn(async move {
-        node.run(shutdown).await.unwrap();
-    });
-    // -------------------------------------------------------
 
     // ===================== GUI APP =====================
     let app = EguiApp {
         state: state.clone(),
-        // state: app::AppState::new(my_ip.to_string()),
         ui: ui_state,
         power_on_texture: None,
         power_off_texture: None,

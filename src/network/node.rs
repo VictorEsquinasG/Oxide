@@ -1,4 +1,4 @@
-use std::net::{Shutdown, SocketAddr};
+use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -62,11 +62,9 @@ impl NetworkNode {
 
     // Accept Shutdown flag
     pub async fn run(&self, shutdown: Arc<AtomicBool>) -> anyhow::Result<()> {
-        let mut buf_tun = [0u8; 4096]; // Buffer for reading from Visual Interface
         let mut buf_udp = [0u8; 4096]; // Buffer for reading from Physical Interface
 
         let ping_interval = tokio::time::Duration::from_secs(2);
-        let ping_timeout = tokio::time::Duration::from_secs(5);
         let mut last_ping = tokio::time::Instant::now();
 
         self.state.log("🤝 Sending HELLO".into());
@@ -77,6 +75,7 @@ impl NetworkNode {
         let timeout = tokio::time::Duration::from_secs(5);
 
         self.auto_ping();
+        self.spawn_tun_reader(shutdown.clone());
 
         loop {
             // Check for shutdown request
@@ -171,44 +170,51 @@ impl NetworkNode {
         });
     }
 
-    /// The main loop that bridges the traffic
-    /// This function spawns two tasks:
-    /// - One for reading from the TUN device and sending over UDP
-    /// - Another for reading from UDP and writing to the TUN device
-    /// Returns when shutdown is requested or an error occurs
-    pub async fn send(&self, packet: &Packet) -> anyhow::Result<()> {
-        let bytes = packet.encode();
-        self.socket.send(&bytes).await?;
-        Ok(())
+    /// Spawn the TUN reader task that forwards packets to the peer
+    fn spawn_tun_reader(&self, shutdown: Arc<AtomicBool>) {
+        let tun_device = self.tun_device.clone();
+        let socket = self.socket.clone();
+        let peer = self.peer;
+        let state = self.state.clone();
+
+        tokio::spawn(async move {
+            let mut buf = [0u8; 4096];
+            loop {
+                if shutdown.load(Ordering::Relaxed) {
+                    state.log("🛑 TUN reader stopped".into());
+                    break;
+                }
+
+                if !state.connected.load(Ordering::Relaxed) {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    continue;
+                }
+
+                let mut dev = tun_device.lock().await;
+                match dev.read(&mut buf).await {
+                    Ok(n) if n > 0 => {
+                        let frame = buf[..n].to_vec();
+                        let packet = Packet::data(frame);
+                        if let Err(e) = socket.send_to(&packet.encode(), peer).await {
+                            state.log(format!("❌ Failed to send data packet: {}", e));
+                        }
+                    }
+                    Ok(_) => {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                    }
+                    Err(e) => {
+                        state.log(format!("❌ TUN read error: {}", e));
+                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    }
+                }
+            }
+        });
     }
 
-    // pub async fn receive_loop(&self) -> anyhow::Result<()> {
-    //     let mut buf = [0u8; 4096]; // Buffer for reading from Visual Interface
-    //                                // let mut buf_tun = [0u8; 4096]; // Buffer for reading from Visual Interface
-    //                                // let mut buf_udp = [0u8; 4096]; // Buffer for reading from Physical Interface
-
-    //     self.state.log("📡 Receive loop started".into());
-
-    //     loop {
-    //         if self.state.shutdown.load(Ordering::Relaxed) {
-    //             self.state.log("🛑 Receive loop stopped".into());
-    //             break;
-    //         }
-
-    //         let len = self.socket.recv(&mut buf).await?;
-
-    //         let packet = Packet::decode(&buf[..len])?;
-
-    //         // Primer paquete = conexión real
-    //         if !self.state.connected.load(Ordering::Relaxed) {
-    //             self.state.connected.store(true, Ordering::Relaxed);
-    //             self.state.log("✅ Connected!".into());
-    //         }
-
-    //         self.state
-    //             .log(format!("📥 Packet id={} ({} bytes)", packet.id, len));
-    //     }
-
-    //     Ok(())
-    // }
+    /// Send a packet through the UDP socket
+    pub async fn send(&self, packet: &Packet) -> anyhow::Result<()> {
+        let bytes = packet.encode();
+        self.socket.send_to(&bytes, self.peer).await?;
+        Ok(())
+    }
 }
