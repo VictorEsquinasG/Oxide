@@ -21,7 +21,7 @@ pub struct AppState {
 impl AppState {
     pub fn new(my_ip: String, peer_port: String) -> Self {
         Self {
-            my_ip,
+            my_ip: my_ip.trim().to_string(),
             peer_ip: Arc::new(Mutex::new(String::new())),
             peer_port: Arc::new(Mutex::new(peer_port)),
             virtual_ip: "10.0.0.1".to_string(),
