@@ -24,7 +24,7 @@ HecateVPN must run on **Windows** and **Linux** simultaneously.
 * The code must compile and run on both platforms at all times.
 
 ### 3. 🌿 Branching & Pull Requests
-* **Never push directly to `main`.**
+* **Never push directly to `master`.**
 * Create a new branch for every feature or fix.
 * Submit a Pull Request (PR) only when the feature is **tested and complete**.
 
