@@ -201,6 +201,11 @@ impl NetworkNode {
                                             Ok(bytes) => {
                                                 self.state
                                                     .log(format!("✅ HELLO_ACK sent ({} bytes)", bytes));
+                                                // Mark as connected after successful HELLO_ACK response
+                                                if !self.state.connected.load(Ordering::Relaxed) {
+                                                    self.state.connected.store(true, Ordering::Relaxed);
+                                                    self.state.log("✅ Connected (sent HELLO_ACK)".into());
+                                                }
                                             }
                                             Err(e) => {
                                                 self.state.log(format!("❌ Failed to send HELLO_ACK: {}", e));
@@ -208,17 +213,29 @@ impl NetworkNode {
                                         }
                                     }
                                     ControlMessage::HelloAck => {
-                                        self.state.connected.store(true, Ordering::Relaxed);
-                                        self.state.log("✅ Connected (HELLO_ACK)".into());
+                                        if !self.state.connected.load(Ordering::Relaxed) {
+                                            self.state.connected.store(true, Ordering::Relaxed);
+                                            self.state.log("✅ Connected (received HELLO_ACK)".into());
+                                        } else {
+                                            self.state.log("ℹ️ Additional HELLO_ACK received".into());
+                                        }
                                     }
                                     ControlMessage::Ping => {
+                                        self.state.log("📍 PING received".into());
                                         let pong = Packet::pong();
                                         let current_peer = *self.peer.lock().await;
-                                        let _ = self.socket.send_to(&pong.encode(), current_peer).await;
+                                        match self.socket.send_to(&pong.encode(), current_peer).await {
+                                            Ok(bytes) => {
+                                                self.state.log(format!("🏓 PONG sent ({} bytes)", bytes));
+                                            }
+                                            Err(e) => {
+                                                self.state.log(format!("❌ Failed to send PONG: {}", e));
+                                            }
+                                        }
                                     }
                                     ControlMessage::Pong => {
                                         self.state.update_last_seen();
-                                        self.state.log("🏓 Pong received".into());
+                                        self.state.log("🏓 PONG received".into());
                                     }
                                 },
                                 PacketPayload::Data(_frame) => {
