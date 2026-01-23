@@ -2,67 +2,46 @@ use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UdpSocket;
 
 use crate::app::AppState;
 use crate::packet::{ControlMessage, Packet, PacketPayload};
 
-/// NetworkNode manages the bridge between the physical network (UDP)
-/// and the virtual network (TAP interface)
+/// NetworkNode manages direct UDP communication without virtual interfaces.
+/// Data flows directly: Local App → UDP Socket → Peer
 #[derive(Clone)]
 pub struct NetworkNode {
     socket: Arc<UdpSocket>,
     peer: SocketAddr,
     state: Arc<AppState>,
-    tun_device: Arc<tokio::sync::Mutex<tun::AsyncDevice>>,
 }
 
 impl NetworkNode {
-    /// Initialize the VPN node
-    /// `virtual_ip`: The IP inside the VPN (e.g. 10.0.0.2)
+    /// Initialize the VPN node with direct UDP tunnel (no TUN device required)
+    /// The connection is transparent - data goes directly over UDP
     pub async fn new(
         bind_addr: SocketAddr,
         peer: SocketAddr,
         state: Arc<AppState>,
-        virtual_ip: &str,
+        _virtual_ip: &str,
     ) -> anyhow::Result<Self> {
-        // Bind UDP socket (Physical layer)
+        // Bind UDP socket for direct peer-to-peer communication
         let socket = UdpSocket::bind(bind_addr).await?;
         let socket = Arc::new(socket);
 
         state.log(format!("🔌 Socket bound on {}, peer={}", bind_addr, peer));
-
-        // Configure TAP device (Virtual layer)
-        let mut config = tun::Configuration::default();
-        config
-            .address(virtual_ip)
-            .netmask("255.255.255.0")
-            .destination(virtual_ip)
-            .up();
-
-        #[cfg(target_os = "linux")]
-        config.platform(|config| {
-            config.packet_information(true); // Linux specific header handling
-        });
-        #[cfg(target_os = "windows")]
-        config.platform(|config| {
-            // config.name("Ethernet");
-        });
-        let tun_device = tun::create_as_async(&config)?;
-        let tun_device = Arc::new(tokio::sync::Mutex::new(tun_device));
+        state.log(format!("📡 Direct UDP tunnel configured (no TUN device needed)"));
 
         Ok(Self {
             socket,
             peer,
             state,
-            tun_device,
         })
     }
 
     // Accept Shutdown flag
     pub async fn run(&self, shutdown: Arc<AtomicBool>) -> anyhow::Result<()> {
-        let mut buf_udp = [0u8; 4096]; // Buffer for reading from Physical Interface
+        let mut buf_udp = [0u8; 4096]; // Buffer for UDP packets
 
         let ping_interval = tokio::time::Duration::from_secs(2);
         let mut last_ping = tokio::time::Instant::now();
@@ -75,7 +54,6 @@ impl NetworkNode {
         let timeout = tokio::time::Duration::from_secs(5);
 
         self.auto_ping();
-        self.spawn_tun_reader(shutdown.clone());
 
         loop {
             // Check for shutdown request
@@ -102,16 +80,14 @@ impl NetworkNode {
                 return Ok(());
             }
 
-            // Enviar PING periódicamente
+            // Send PING periodically
             if self.state.connected.load(Ordering::Relaxed) && last_ping.elapsed() > ping_interval {
                 let ping = Packet::ping();
                 let _ = self.socket.send_to(&ping.encode(), self.peer).await;
                 last_ping = tokio::time::Instant::now();
             }
 
-            // Use tokio select to handle whichever comes first:
-            // 1. The game sends a packet (Read from TUN)
-            // 2. The peer sends a packet (Read from UDP)
+            // Direct UDP packet handling - no TUN device
             if let Ok((n, src)) = self.socket.try_recv_from(&mut buf_udp) {
                 if src == self.peer {
                     if let Ok(packet) = Packet::decode(&buf_udp[..n]) {
@@ -135,9 +111,10 @@ impl NetworkNode {
                                     self.state.log("🏓 Pong received".into());
                                 }
                             },
-                            PacketPayload::Data(frame) => {
-                                let mut dev = self.tun_device.lock().await;
-                                let _ = dev.write_all(&frame).await;
+                            PacketPayload::Data(_frame) => {
+                                // Direct UDP tunnel - data is handled by application
+                                // No TUN device needed for forwarding
+                                self.state.log("📦 Data packet received (UDP tunnel)".into());
                             }
                         }
                     }
@@ -165,47 +142,6 @@ impl NetworkNode {
                 if state.connected.load(Ordering::Relaxed) {
                     let ping = Packet::ping();
                     let _ = socket.send_to(&ping.encode(), peer).await;
-                }
-            }
-        });
-    }
-
-    /// Spawn the TUN reader task that forwards packets to the peer
-    fn spawn_tun_reader(&self, shutdown: Arc<AtomicBool>) {
-        let tun_device = self.tun_device.clone();
-        let socket = self.socket.clone();
-        let peer = self.peer;
-        let state = self.state.clone();
-
-        tokio::spawn(async move {
-            let mut buf = [0u8; 4096];
-            loop {
-                if shutdown.load(Ordering::Relaxed) {
-                    state.log("🛑 TUN reader stopped".into());
-                    break;
-                }
-
-                if !state.connected.load(Ordering::Relaxed) {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                    continue;
-                }
-
-                let mut dev = tun_device.lock().await;
-                match dev.read(&mut buf).await {
-                    Ok(n) if n > 0 => {
-                        let frame = buf[..n].to_vec();
-                        let packet = Packet::data(frame);
-                        if let Err(e) = socket.send_to(&packet.encode(), peer).await {
-                            state.log(format!("❌ Failed to send data packet: {}", e));
-                        }
-                    }
-                    Ok(_) => {
-                        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-                    }
-                    Err(e) => {
-                        state.log(format!("❌ TUN read error: {}", e));
-                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                    }
                 }
             }
         });

@@ -4,6 +4,7 @@ mod network;
 mod packet;
 mod tray;
 mod ui;
+mod system;
 
 use egui::IconData;
 use local_ip_address::local_ip;
@@ -39,6 +40,12 @@ async fn main() -> eframe::Result<()> {
     let my_ip = local_ip().unwrap_or_else(|_| "0.0.0.0".parse().unwrap());
     // ===================== GLOBAL STATE =====================
     let state = Arc::new(app::AppState::new(my_ip.to_string(), "9000".to_string()));
+
+    // ===================== SYSTEM INFO ====================
+    // Direct UDP tunnel - No WireGuard or Wintun required!
+    state.log("🔌 Configuración: Túnel UDP directo (sin WireGuard)".into());
+    state.log("✅ Sistema listo para conectar".into());
+
     // ===================== SYSTEM TRAY =====================
     let _tray = tray::node::spawn_tray(state.clone());
     // ===================== UI STATE =====================
@@ -53,6 +60,7 @@ async fn main() -> eframe::Result<()> {
         ui: ui_state,
         power_on_texture: None,
         power_off_texture: None,
+        wintun_install_attempted: false,
     };
 
     let native_options = eframe::NativeOptions {

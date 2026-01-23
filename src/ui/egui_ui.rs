@@ -5,6 +5,7 @@ use std::sync::atomic::Ordering;
 use crate::app::AppState;
 use std::sync::Arc;
 use crate::network::node::NetworkNode;
+use crate::system::wintun;
 
 #[derive(Default)]
 pub struct UiState {
@@ -17,6 +18,7 @@ pub struct EguiApp {
     pub ui: UiState,
     pub power_on_texture: Option<egui::TextureHandle>,
     pub power_off_texture: Option<egui::TextureHandle>,
+    pub wintun_install_attempted: bool,
 }
 
 impl EguiApp {
@@ -27,6 +29,7 @@ impl EguiApp {
             ui: UiState::default(),
             power_on_texture: None,
             power_off_texture: None,
+            wintun_install_attempted: false,
         }
     }
 
@@ -66,9 +69,39 @@ impl EguiApp {
             self.state.connected.store(false, Ordering::Relaxed);
             self.state.log("🛑 Disconnecting...".into());
         } else {
+            // Check if wintun is installed
+            if !wintun::is_wintun_installed() {
+                // Solo intenta instalar UNA VEZ, no en cada intento
+                if !self.wintun_install_attempted {
+                    self.wintun_install_attempted = true;
+                    self.state.log("⚠️ Wintun no encontrado. Iniciando instalación...".into());
+                    
+                    let state_for_progress = self.state.clone();
+                    let on_progress = Arc::new(tokio::sync::Mutex::new(Box::new(move |msg: String| {
+                        state_for_progress.log(msg);
+                    }) as Box<dyn Fn(String) + Send>));
+                    
+                    let state_for_install = self.state.clone();
+                    let _install_handle = tokio::spawn(async move {
+                        match wintun::install_wintun(Some(on_progress)).await {
+                            Ok(_) => {
+                                state_for_install.log("✅ Instalación completada. Por favor, reinicia HecateVPN.".into());
+                            }
+                            Err(e) => {
+                                state_for_install.log(format!("❌ Error en instalación: {}", e));
+                            }
+                        }
+                    });
+                    return;
+                } else {
+                    self.state.log("⚠️ Instalación en progreso o completada. Por favor, reinicia la app.".into());
+                    return;
+                }
+            }
+
             // Connect
             if self.ui.peer_ip.is_empty() {
-                self.state.log("❌ Peer IP cannot be empty".into());
+                self.state.log("❌ IP del peer no puede estar vacía".into());
                 return;
             }
 
@@ -76,7 +109,7 @@ impl EguiApp {
             let peer_port = self.ui.peer_port.clone();
             let state = self.state.clone();
 
-            self.state.log(format!("🔌 Connecting to {}:{}", peer_ip, peer_port));
+            self.state.log(format!("🔌 Conectando a {}:{}", peer_ip, peer_port));
 
             // Spawn connection task
             tokio::spawn(async move {
@@ -91,25 +124,25 @@ impl EguiApp {
                                     .await
                                 {
                                     Ok(node) => {
-                                        state.log("✅ NetworkNode created".into());
+                                        state.log("✅ NetworkNode creado".into());
                                         let shutdown = state.shutdown.clone();
                                         state.shutdown.store(false, Ordering::Relaxed);
                                         if let Err(e) = node.run(shutdown).await {
-                                            state.log(format!("❌ Connection error: {}", e));
+                                            state.log(format!("❌ Error de conexión: {}", e));
                                         }
                                     }
                                     Err(e) => {
-                                        state.log(format!("❌ Failed to create NetworkNode: {}", e));
+                                        state.log(format!("❌ Error al crear NetworkNode: {}", e));
                                     }
                                 }
                             }
                             Err(e) => {
-                                state.log(format!("❌ Invalid bind address: {}", e));
+                                state.log(format!("❌ Dirección de bind inválida: {}", e));
                             }
                         }
                     }
                     Err(e) => {
-                        state.log(format!("❌ Invalid peer address: {}", e));
+                        state.log(format!("❌ Dirección del peer inválida: {}", e));
                     }
                 }
             });
