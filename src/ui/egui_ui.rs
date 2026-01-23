@@ -5,6 +5,8 @@ use std::sync::atomic::Ordering;
 use crate::app::AppState;
 use std::sync::Arc;
 use crate::network::node::NetworkNode;
+
+#[cfg(windows)]
 use crate::system::wintun;
 
 #[derive(Default)]
@@ -69,33 +71,36 @@ impl EguiApp {
             self.state.connected.store(false, Ordering::Relaxed);
             self.state.log("🛑 Disconnecting...".into());
         } else {
-            // Check if wintun is installed
-            if !wintun::is_wintun_installed() {
-                // Solo intenta instalar UNA VEZ, no en cada intento
-                if !self.wintun_install_attempted {
-                    self.wintun_install_attempted = true;
-                    self.state.log("⚠️ Wintun no encontrado. Iniciando instalación...".into());
-                    
-                    let state_for_progress = self.state.clone();
-                    let on_progress = Arc::new(tokio::sync::Mutex::new(Box::new(move |msg: String| {
-                        state_for_progress.log(msg);
-                    }) as Box<dyn Fn(String) + Send>));
-                    
-                    let state_for_install = self.state.clone();
-                    let _install_handle = tokio::spawn(async move {
-                        match wintun::install_wintun(Some(on_progress)).await {
-                            Ok(_) => {
-                                state_for_install.log("✅ Instalación completada. Por favor, reinicia HecateVPN.".into());
+            // Check if wintun is installed (only on Windows)
+            #[cfg(windows)]
+            {
+                if !wintun::is_wintun_installed() {
+                    // Solo intenta instalar UNA VEZ, no en cada intento
+                    if !self.wintun_install_attempted {
+                        self.wintun_install_attempted = true;
+                        self.state.log("⚠️ Wintun no encontrado. Iniciando instalación...".into());
+                        
+                        let state_for_progress = self.state.clone();
+                        let on_progress = Arc::new(tokio::sync::Mutex::new(Box::new(move |msg: String| {
+                            state_for_progress.log(msg);
+                        }) as Box<dyn Fn(String) + Send>));
+                        
+                        let state_for_install = self.state.clone();
+                        let _install_handle = tokio::spawn(async move {
+                            match wintun::install_wintun(Some(on_progress)).await {
+                                Ok(_) => {
+                                    state_for_install.log("✅ Instalación completada. Por favor, reinicia HecateVPN.".into());
+                                }
+                                Err(e) => {
+                                    state_for_install.log(format!("❌ Error en instalación: {}", e));
+                                }
                             }
-                            Err(e) => {
-                                state_for_install.log(format!("❌ Error en instalación: {}", e));
-                            }
-                        }
-                    });
-                    return;
-                } else {
-                    self.state.log("⚠️ Instalación en progreso o completada. Por favor, reinicia la app.".into());
-                    return;
+                        });
+                        return;
+                    } else {
+                        self.state.log("⚠️ Instalación en progreso o completada. Por favor, reinicia la app.".into());
+                        return;
+                    }
                 }
             }
 

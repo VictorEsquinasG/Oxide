@@ -4,6 +4,9 @@ use std::sync::Arc;
 
 use tokio::net::UdpSocket;
 
+#[cfg(unix)]
+use std::os::unix::io::AsRawFd;
+
 use crate::app::AppState;
 use crate::packet::{ControlMessage, Packet, PacketPayload};
 
@@ -25,8 +28,22 @@ impl NetworkNode {
         state: Arc<AppState>,
         _virtual_ip: &str,
     ) -> anyhow::Result<Self> {
-        // Bind UDP socket for direct peer-to-peer communication
-        let socket = UdpSocket::bind(bind_addr).await?;
+        // Create a standard UDP socket with SO_REUSEADDR to allow quick reconnection
+        let std_socket = std::net::UdpSocket::bind(bind_addr)?;
+        
+        // Set SO_REUSEADDR and SO_REUSEPORT to allow immediate reuse of the port
+        #[cfg(unix)]
+        {
+            use nix::sys::socket::{setsockopt, sockopt};
+            use std::os::unix::io::BorrowedFd;
+            let raw_fd = std_socket.as_raw_fd();
+            let fd = unsafe { BorrowedFd::borrow_raw(raw_fd) };
+            let _ = setsockopt(&fd, sockopt::ReuseAddr, &true);
+            let _ = setsockopt(&fd, sockopt::ReusePort, &true);
+        }
+        
+        std_socket.set_nonblocking(true)?;
+        let socket = UdpSocket::from_std(std_socket)?;
         let socket = Arc::new(socket);
 
         state.log(format!("🔌 Socket bound on {}, peer={}", bind_addr, peer));

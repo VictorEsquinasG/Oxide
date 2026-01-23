@@ -20,39 +20,46 @@ fn get_marker_path() -> PathBuf {
 
 /// Check if wintun.dll is installed and accessible
 pub fn is_wintun_installed() -> bool {
-    // Método 1: Verificar si el archivo marker existe (instalación anterior)
-    if get_marker_path().exists() {
-        return true;
-    }
+    // En Linux, Wintun no es necesario, retornamos true automáticamente
+    #[cfg(not(windows))]
+    return true;
 
-    // Método 2: Verificar la DLL en rutas estándar
-    let dll_paths = [
-        "C:\\Windows\\System32\\wintun.dll",
-        "C:\\Windows\\SysWOW64\\wintun.dll",
-    ];
-    
-    for path in &dll_paths {
-        if PathBuf::from(path).exists() {
-            create_marker_file();
+    #[cfg(windows)]
+    {
+        // Método 1: Verificar si el archivo marker existe (instalación anterior)
+        if get_marker_path().exists() {
             return true;
         }
+
+        // Método 2: Verificar la DLL en rutas estándar
+        let dll_paths = [
+            "C:\\Windows\\System32\\wintun.dll",
+            "C:\\Windows\\SysWOW64\\wintun.dll",
+        ];
+        
+        for path in &dll_paths {
+            if PathBuf::from(path).exists() {
+                create_marker_file();
+                return true;
+            }
+        }
+
+        // Método 3: Verificar mediante pnputil (menos confiable pero intenta)
+        let result = Command::new("pnputil")
+            .arg("/enum-drivers")
+            .output()
+            .map(|o| {
+                let text = String::from_utf8_lossy(&o.stdout);
+                text.contains("Wintun") || text.contains("wintun")
+            })
+            .unwrap_or(false);
+
+        if result {
+            create_marker_file();
+        }
+
+        result
     }
-
-    // Método 3: Verificar mediante pnputil (menos confiable pero intenta)
-    let result = Command::new("pnputil")
-        .arg("/enum-drivers")
-        .output()
-        .map(|o| {
-            let text = String::from_utf8_lossy(&o.stdout);
-            text.contains("Wintun") || text.contains("wintun")
-        })
-        .unwrap_or(false);
-
-    if result {
-        create_marker_file();
-    }
-
-    result
 }
 
 fn create_marker_file() {
