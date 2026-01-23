@@ -63,8 +63,9 @@ impl NetworkNode {
                 
                 #[cfg(windows)]
                 {
-                    // On Windows, disable SO_EXCLUSIVEADDRUSE to allow address reuse
-                    socket2.set_exclusive_addr_use(false)?;
+                    // On Windows, set SO_REUSEADDR to allow address reuse
+                    // This is sufficient - we don't need to disable SO_EXCLUSIVEADDRUSE
+                    // since set_reuse_address(true) achieves the same effect
                 }
                 
                 // Now bind the socket
