@@ -204,6 +204,7 @@ impl NetworkNode {
                                                 // Mark as connected after successful HELLO_ACK response
                                                 if !self.state.connected.load(Ordering::Relaxed) {
                                                     self.state.connected.store(true, Ordering::Relaxed);
+                                                    self.state.update_last_seen();
                                                     self.state.log("✅ Connected (sent HELLO_ACK)".into());
                                                 }
                                             }
@@ -215,6 +216,7 @@ impl NetworkNode {
                                     ControlMessage::HelloAck => {
                                         if !self.state.connected.load(Ordering::Relaxed) {
                                             self.state.connected.store(true, Ordering::Relaxed);
+                                            self.state.update_last_seen();
                                             self.state.log("✅ Connected (received HELLO_ACK)".into());
                                         } else {
                                             self.state.log("ℹ️ Additional HELLO_ACK received".into());

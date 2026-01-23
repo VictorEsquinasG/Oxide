@@ -21,6 +21,11 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(my_ip: String, peer_port: String) -> Self {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+            
         Self {
             my_ip: my_ip.trim().to_string(),
             peer_ip: Arc::new(Mutex::new(String::new())),
@@ -30,7 +35,7 @@ impl AppState {
             shutdown: Arc::new(AtomicBool::new(false)),
             connection_handle: Arc::new(Mutex::new(None)),
             logs: Arc::new(Mutex::new(Vec::new())),
-            last_seen: AtomicU64::new(0),
+            last_seen: AtomicU64::new(now),
             shared_socket: Arc::new(Mutex::new(None)),
         }
     }
