@@ -102,12 +102,23 @@ impl NetworkNode {
 
         self.state.log("🤝 Sending HELLO".into());
         let hello = Packet::hello();
-        self.socket.send_to(&hello.encode(), self.peer).await?;
+        match self.socket.send_to(&hello.encode(), self.peer).await {
+            Ok(bytes) => {
+                self.state.log(format!("✅ HELLO sent ({} bytes to {})", bytes, self.peer));
+            }
+            Err(e) => {
+                self.state.log(format!("❌ Failed to send HELLO: {}", e));
+                return Err(e.into());
+            }
+        }
 
         let start = tokio::time::Instant::now();
         let timeout = tokio::time::Duration::from_secs(5);
 
         self.auto_ping();
+
+        let mut packet_count = 0;
+        let mut unknown_source_count = 0;
 
         loop {
             // Check for shutdown request
@@ -117,7 +128,11 @@ impl NetworkNode {
             }
             // Check for timeout
             if !self.state.connected.load(Ordering::Relaxed) && start.elapsed() > timeout {
-                self.state.log("❌ Connection failed (timeout)".into());
+                self.state.log(format!(
+                    "❌ Connection failed (timeout after {:.1}s, received {} packets)",
+                    start.elapsed().as_secs_f32(),
+                    packet_count
+                ));
                 return Ok(());
             }
             // Check for real disconnection
@@ -142,38 +157,76 @@ impl NetworkNode {
             }
 
             // Direct UDP packet handling - no TUN device
-            if let Ok((n, src)) = self.socket.try_recv_from(&mut buf_udp) {
-                if src == self.peer {
-                    if let Ok(packet) = Packet::decode(&buf_udp[..n]) {
-                        match packet.payload {
-                            PacketPayload::Control(msg) => match msg {
-                                ControlMessage::Hello => {
-                                    self.state.log("👋 HELLO received".into());
-                                    let ack = Packet::hello_ack();
-                                    let _ = self.socket.send_to(&ack.encode(), self.peer).await;
+            match self.socket.try_recv_from(&mut buf_udp) {
+                Ok((n, src)) => {
+                    packet_count += 1;
+                    self.state.log(format!(
+                        "📨 Received {} bytes from {}",
+                        n, src
+                    ));
+
+                    if src == self.peer {
+                        self.state.log(format!(
+                            "✅ Packet from expected peer: {}",
+                            src
+                        ));
+                        
+                        if let Ok(packet) = Packet::decode(&buf_udp[..n]) {
+                            match packet.payload {
+                                PacketPayload::Control(msg) => match msg {
+                                    ControlMessage::Hello => {
+                                        self.state.log("👋 HELLO received".into());
+                                        let ack = Packet::hello_ack();
+                                        match self.socket.send_to(&ack.encode(), self.peer).await {
+                                            Ok(bytes) => {
+                                                self.state
+                                                    .log(format!("✅ HELLO_ACK sent ({} bytes)", bytes));
+                                            }
+                                            Err(e) => {
+                                                self.state.log(format!("❌ Failed to send HELLO_ACK: {}", e));
+                                            }
+                                        }
+                                    }
+                                    ControlMessage::HelloAck => {
+                                        self.state.connected.store(true, Ordering::Relaxed);
+                                        self.state.log("✅ Connected (HELLO_ACK)".into());
+                                    }
+                                    ControlMessage::Ping => {
+                                        let pong = Packet::pong();
+                                        let _ = self.socket.send_to(&pong.encode(), self.peer).await;
+                                    }
+                                    ControlMessage::Pong => {
+                                        self.state.update_last_seen();
+                                        self.state.log("🏓 Pong received".into());
+                                    }
+                                },
+                                PacketPayload::Data(_frame) => {
+                                    // Direct UDP tunnel - data is handled by application
+                                    // No TUN device needed for forwarding
+                                    self.state.log("📦 Data packet received (UDP tunnel)".into());
                                 }
-                                ControlMessage::HelloAck => {
-                                    self.state.connected.store(true, Ordering::Relaxed);
-                                    self.state.log("✅ Connected (HELLO_ACK)".into());
-                                }
-                                ControlMessage::Ping => {
-                                    let pong = Packet::pong();
-                                    let _ = self.socket.send_to(&pong.encode(), self.peer).await;
-                                }
-                                ControlMessage::Pong => {
-                                    self.state.update_last_seen();
-                                    self.state.log("🏓 Pong received".into());
-                                }
-                            },
-                            PacketPayload::Data(_frame) => {
-                                // Direct UDP tunnel - data is handled by application
-                                // No TUN device needed for forwarding
-                                self.state.log("📦 Data packet received (UDP tunnel)".into());
                             }
+                        } else {
+                            self.state.log("⚠️ Failed to decode packet from peer".into());
                         }
+                    } else {
+                        unknown_source_count += 1;
+                        self.state.log(format!(
+                            "⚠️ Packet from unknown source: {} (expected: {}, count: {})",
+                            src, self.peer, unknown_source_count
+                        ));
                     }
                 }
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    // No data available - this is expected for non-blocking socket
+                }
+                Err(e) => {
+                    self.state.log(format!("❌ Socket receive error: {}", e));
+                }
             }
+
+            // Small sleep to avoid busy waiting
+            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
         }
         Ok(())
     }
