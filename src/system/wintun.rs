@@ -4,9 +4,8 @@ use tokio::sync::Mutex;
 
 use std::process::{Command, Stdio};
 use std::time::Duration;
+
 const WG_INSTALLER: &[u8] = include_bytes!("../../dependences/wireguard-installer.exe");
-// const WINTUN_DLL_URL: &str = "https://www.wintun.net/builds/wintun-0.14.1-amd64.msi";
-const WINTUN_VERSION: &str = "0.14.1";
 const WINTUN_MARKER_FILE: &str = "wintun_installed.marker";
 
 fn get_marker_path() -> PathBuf {
@@ -58,12 +57,6 @@ pub fn is_wintun_installed() -> bool {
 
 fn create_marker_file() {
     let _ = std::fs::write(get_marker_path(), b"WINTUN_INSTALLED");
-}
-
-
-/// Check if DLL exists at specific path
-fn check_dll_in_path(path: &str) -> bool {
-    PathBuf::from(path).exists()
 }
 
 fn extract_wireguard_installer() -> std::path::PathBuf {
