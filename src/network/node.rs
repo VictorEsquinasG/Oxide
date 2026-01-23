@@ -16,7 +16,7 @@ use crate::packet::{ControlMessage, Packet, PacketPayload};
 #[derive(Clone)]
 pub struct NetworkNode {
     socket: Arc<UdpSocket>,
-    peer: SocketAddr,
+    peer: Arc<tokio::sync::Mutex<SocketAddr>>, // Make peer mutable to handle NAT reflexive addresses
     state: Arc<AppState>,
 }
 
@@ -88,7 +88,7 @@ impl NetworkNode {
 
         Ok(Self {
             socket,
-            peer,
+            peer: Arc::new(tokio::sync::Mutex::new(peer)),
             state,
         })
     }
@@ -102,9 +102,10 @@ impl NetworkNode {
 
         self.state.log("🤝 Sending HELLO".into());
         let hello = Packet::hello();
-        match self.socket.send_to(&hello.encode(), self.peer).await {
+        let peer_addr = *self.peer.lock().await;
+        match self.socket.send_to(&hello.encode(), peer_addr).await {
             Ok(bytes) => {
-                self.state.log(format!("✅ HELLO sent ({} bytes to {})", bytes, self.peer));
+                self.state.log(format!("✅ HELLO sent ({} bytes to {})", bytes, peer_addr));
             }
             Err(e) => {
                 self.state.log(format!("❌ Failed to send HELLO: {}", e));
@@ -152,7 +153,8 @@ impl NetworkNode {
             // Send PING periodically
             if self.state.connected.load(Ordering::Relaxed) && last_ping.elapsed() > ping_interval {
                 let ping = Packet::ping();
-                let _ = self.socket.send_to(&ping.encode(), self.peer).await;
+                let current_peer = *self.peer.lock().await;
+                let _ = self.socket.send_to(&ping.encode(), current_peer).await;
                 last_ping = tokio::time::Instant::now();
             }
 
@@ -160,14 +162,31 @@ impl NetworkNode {
             match self.socket.try_recv_from(&mut buf_udp) {
                 Ok((n, src)) => {
                     packet_count += 1;
+                    let expected_peer = *self.peer.lock().await;
+                    
                     self.state.log(format!(
                         "📨 Received {} bytes from {}",
                         n, src
                     ));
 
-                    if src == self.peer {
+                    // Check if this is from the expected peer OR if we haven't verified the peer yet
+                    let is_expected_peer = src == expected_peer;
+                    let is_same_port = src.port() == expected_peer.port();
+                    let is_peer_candidate = !self.state.connected.load(Ordering::Relaxed) && is_same_port;
+                    
+                    if is_expected_peer || is_peer_candidate {
+                        // If from a different address but same port and not connected, 
+                        // update peer address (handles NAT reflexive addresses)
+                        if !is_expected_peer && is_peer_candidate {
+                            self.state.log(format!(
+                                "🔄 NAT detected! Updating peer address from {} to {}",
+                                expected_peer, src
+                            ));
+                            *self.peer.lock().await = src;
+                        }
+                        
                         self.state.log(format!(
-                            "✅ Packet from expected peer: {}",
+                            "✅ Packet from peer: {}",
                             src
                         ));
                         
@@ -177,7 +196,8 @@ impl NetworkNode {
                                     ControlMessage::Hello => {
                                         self.state.log("👋 HELLO received".into());
                                         let ack = Packet::hello_ack();
-                                        match self.socket.send_to(&ack.encode(), self.peer).await {
+                                        let current_peer = *self.peer.lock().await;
+                                        match self.socket.send_to(&ack.encode(), current_peer).await {
                                             Ok(bytes) => {
                                                 self.state
                                                     .log(format!("✅ HELLO_ACK sent ({} bytes)", bytes));
@@ -193,7 +213,8 @@ impl NetworkNode {
                                     }
                                     ControlMessage::Ping => {
                                         let pong = Packet::pong();
-                                        let _ = self.socket.send_to(&pong.encode(), self.peer).await;
+                                        let current_peer = *self.peer.lock().await;
+                                        let _ = self.socket.send_to(&pong.encode(), current_peer).await;
                                     }
                                     ControlMessage::Pong => {
                                         self.state.update_last_seen();
@@ -213,7 +234,7 @@ impl NetworkNode {
                         unknown_source_count += 1;
                         self.state.log(format!(
                             "⚠️ Packet from unknown source: {} (expected: {}, count: {})",
-                            src, self.peer, unknown_source_count
+                            src, expected_peer, unknown_source_count
                         ));
                     }
                 }
@@ -233,7 +254,7 @@ impl NetworkNode {
 
     fn auto_ping(&self) -> () {
         let socket = self.socket.clone();
-        let peer = self.peer;
+        let peer = self.peer.clone();
         let state = self.state.clone();
 
         tokio::spawn(async move {
@@ -248,7 +269,8 @@ impl NetworkNode {
 
                 if state.connected.load(Ordering::Relaxed) {
                     let ping = Packet::ping();
-                    let _ = socket.send_to(&ping.encode(), peer).await;
+                    let current_peer = *peer.lock().await;
+                    let _ = socket.send_to(&ping.encode(), current_peer).await;
                 }
             }
         });
@@ -257,7 +279,8 @@ impl NetworkNode {
     /// Send a packet through the UDP socket
     pub async fn send(&self, packet: &Packet) -> anyhow::Result<()> {
         let bytes = packet.encode();
-        self.socket.send_to(&bytes, self.peer).await?;
+        let current_peer = *self.peer.lock().await;
+        self.socket.send_to(&bytes, current_peer).await?;
         Ok(())
     }
 }
