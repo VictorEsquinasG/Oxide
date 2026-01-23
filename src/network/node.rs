@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use tokio::net::UdpSocket;
+use socket2::{Socket, Domain, Type};
 
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
@@ -28,23 +29,58 @@ impl NetworkNode {
         state: Arc<AppState>,
         _virtual_ip: &str,
     ) -> anyhow::Result<Self> {
-        // Create a standard UDP socket with SO_REUSEADDR to allow quick reconnection
-        let std_socket = std::net::UdpSocket::bind(bind_addr)?;
-        
-        // Set SO_REUSEADDR and SO_REUSEPORT to allow immediate reuse of the port
-        #[cfg(unix)]
-        {
-            use nix::sys::socket::{setsockopt, sockopt};
-            use std::os::unix::io::BorrowedFd;
-            let raw_fd = std_socket.as_raw_fd();
-            let fd = unsafe { BorrowedFd::borrow_raw(raw_fd) };
-            let _ = setsockopt(&fd, sockopt::ReuseAddr, &true);
-            let _ = setsockopt(&fd, sockopt::ReusePort, &true);
-        }
-        
-        std_socket.set_nonblocking(true)?;
-        let socket = UdpSocket::from_std(std_socket)?;
-        let socket = Arc::new(socket);
+        // Try to get or create a shared socket
+        let socket = {
+            let mut socket_guard = state.shared_socket.lock().unwrap();
+            
+            if let Some(existing_socket) = socket_guard.as_ref() {
+                // Reuse existing socket
+                existing_socket.clone()
+            } else {
+                // Create a new socket using socket2 to set options BEFORE binding
+                let socket2 = Socket::new(Domain::for_address(bind_addr), Type::DGRAM, None)?;
+                
+                // Set SO_REUSEADDR BEFORE binding to allow immediate reuse
+                socket2.set_reuse_address(true)?;
+                
+                #[cfg(unix)]
+                {
+                    // On Unix, also set SO_REUSEPORT for even better reuse behavior
+                    let true_val: libc::c_int = 1;
+                    unsafe {
+                        let result = libc::setsockopt(
+                            socket2.as_raw_fd(),
+                            libc::SOL_SOCKET,
+                            libc::SO_REUSEPORT,
+                            &true_val as *const _ as *const libc::c_void,
+                            std::mem::size_of::<libc::c_int>() as libc::socklen_t,
+                        );
+                        if result != 0 {
+                            state.log("⚠️ Warning: Could not set SO_REUSEPORT".into());
+                        }
+                    }
+                }
+                
+                #[cfg(windows)]
+                {
+                    // On Windows, disable SO_EXCLUSIVEADDRUSE to allow address reuse
+                    socket2.set_exclusive_addr_use(false)?;
+                }
+                
+                // Now bind the socket
+                socket2.bind(&bind_addr.into())?;
+                socket2.set_nonblocking(true)?;
+                
+                // Convert to Tokio UdpSocket
+                let std_socket = std::net::UdpSocket::from(socket2);
+                let socket = UdpSocket::from_std(std_socket)?;
+                let socket = Arc::new(socket);
+                
+                // Store in shared state
+                *socket_guard = Some(socket.clone());
+                socket
+            }
+        };
 
         state.log(format!("🔌 Socket bound on {}, peer={}", bind_addr, peer));
         state.log(format!("📡 Direct UDP tunnel configured (no TUN device needed)"));

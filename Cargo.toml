@@ -19,4 +19,5 @@ libloading = "0.8"
 rfd = "0.14"                 # for system dialogs
 reqwest = { version = "0.11", features = ["stream"] }
 zip = "0.6"
-nix = { version = "0.27", features = ["net"] }  # for socket options on Unix
+socket2 = "0.6"              # for socket configuration (SO_REUSEADDR, SO_REUSEPORT)
+libc = "0.2"                 # for raw socket operations on Unix

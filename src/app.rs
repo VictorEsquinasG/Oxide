@@ -1,9 +1,9 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use tokio::net::UdpSocket;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[derive(Default)]
 pub struct AppState {
     pub my_ip: String,
 
@@ -16,6 +16,7 @@ pub struct AppState {
     pub connection_handle: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
     pub last_seen: AtomicU64,
     pub logs: Arc<Mutex<Vec<String>>>,
+    pub shared_socket: Arc<Mutex<Option<Arc<UdpSocket>>>>, // Shared UDP socket
 }
 
 impl AppState {
@@ -30,7 +31,7 @@ impl AppState {
             connection_handle: Arc::new(Mutex::new(None)),
             logs: Arc::new(Mutex::new(Vec::new())),
             last_seen: AtomicU64::new(0),
-            ..Default::default()
+            shared_socket: Arc::new(Mutex::new(None)),
         }
     }
 
