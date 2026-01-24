@@ -21,3 +21,6 @@ reqwest = { version = "0.11", features = ["stream"] }
 zip = "0.6"
 socket2 = "0.6"              # for socket configuration (SO_REUSEADDR, SO_REUSEPORT)
 libc = "0.2"                 # for raw socket operations on Unix
+tun = "0.6"                  # for TUN device creation on Linux and macOS
+pnet = "0.34"                # for packet parsing and networking utilities
+pnet_packet = "0.34"         # for packet handling

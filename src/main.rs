@@ -42,8 +42,9 @@ async fn main() -> eframe::Result<()> {
     let state = Arc::new(app::AppState::new(my_ip.to_string(), "9000".to_string()));
 
     // ===================== SYSTEM INFO ====================
-    // Direct UDP tunnel - No WireGuard or Wintun required!
-    state.log("🔌 Configuración: Túnel UDP directo (sin WireGuard)".into());
+    // VPN LAN Emulation - Direct P2P tunnel via UDP
+    state.log("🎮 HecateVPN - LAN Emulation for Legacy Games".into());
+    state.log("📡 Arquitectura: TUN Virtual Interface + UDP P2P".into());
     state.log("✅ Sistema listo para conectar".into());
 
     // ===================== SYSTEM TRAY =====================
