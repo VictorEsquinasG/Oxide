@@ -7,7 +7,7 @@ use std::sync::Arc;
 use crate::network::node::NetworkNode;
 
 #[cfg(windows)]
-use crate::system::wintun;
+use crate::system::{SystemInstaller, WintunInstaller, NpcapInstaller};
 
 #[derive(Default)]
 pub struct UiState {
@@ -21,6 +21,7 @@ pub struct EguiApp {
     pub power_on_texture: Option<egui::TextureHandle>,
     pub power_off_texture: Option<egui::TextureHandle>,
     pub wintun_install_attempted: bool,
+    pub npcap_install_attempted: bool,
 }
 
 impl EguiApp {
@@ -32,6 +33,7 @@ impl EguiApp {
             power_on_texture: None,
             power_off_texture: None,
             wintun_install_attempted: false,
+            npcap_install_attempted: false,
         }
     }
 
@@ -65,93 +67,138 @@ impl EguiApp {
     }
 
     fn toggle_connection(&mut self) {
-        if self.state.connected.load(Ordering::Relaxed) {
-            // Disconnect
+        // Single return pattern: determine action early with guards
+        let should_disconnect = self.state.connected.load(Ordering::Relaxed);
+        
+        if should_disconnect {
+            // Disconnect path
             self.state.shutdown.store(true, Ordering::Relaxed);
             self.state.connected.store(false, Ordering::Relaxed);
             self.state.log("🛑 Disconnecting...".into());
-        } else {
-            // Check if wintun is installed (only on Windows)
-            #[cfg(windows)]
-            {
-                if !wintun::is_wintun_installed() {
-                    // Solo intenta instalar UNA VEZ, no en cada intento
-                    if !self.wintun_install_attempted {
-                        self.wintun_install_attempted = true;
-                        self.state.log("⚠️ Wintun no encontrado. Iniciando instalación...".into());
-                        
-                        let state_for_progress = self.state.clone();
-                        let on_progress = Arc::new(tokio::sync::Mutex::new(Box::new(move |msg: String| {
-                            state_for_progress.log(msg);
-                        }) as Box<dyn Fn(String) + Send>));
-                        
-                        let state_for_install = self.state.clone();
-                        let _install_handle = tokio::spawn(async move {
-                            match wintun::install_wintun(Some(on_progress)).await {
-                                Ok(_) => {
-                                    state_for_install.log("✅ Instalación completada. Por favor, reinicia HecateVPN.".into());
-                                }
-                                Err(e) => {
-                                    state_for_install.log(format!("❌ Error en instalación: {}", e));
-                                }
-                            }
-                        });
-                        return;
-                    } else {
-                        self.state.log("⚠️ Instalación en progreso o completada. Por favor, reinicia la app.".into());
-                        return;
-                    }
-                }
-            }
+            return;
+        }
 
-            // Connect
-            if self.ui.peer_ip.is_empty() {
-                self.state.log("❌ IP del peer no puede estar vacía".into());
+        // Connect path - validate peer IP
+        let Some(peer_ip) = self.validate_and_get_peer_ip() else {
+            return;
+        };
+
+        // Check system dependencies (Windows only)
+        #[cfg(windows)]
+        {
+            // Check Wintun first
+            if !WintunInstaller.is_installed() {
+                if !self.wintun_install_attempted {
+                    self.wintun_install_attempted = true;
+                    self.state.log(format!("⚠️ {} no encontrado. Iniciando instalación...", WintunInstaller.name()));
+                    
+                    let state_for_progress = self.state.clone();
+                    let on_progress = Arc::new(tokio::sync::Mutex::new(Box::new(move |msg: String| {
+                        state_for_progress.log(msg);
+                    }) as Box<dyn Fn(String) + Send>));
+                    
+                    let state_for_install = self.state.clone();
+                    let installer_name = WintunInstaller.name().to_string();
+                    let _install_handle = tokio::spawn(async move {
+                        match WintunInstaller.install(Some(on_progress)).await {
+                            Ok(_) => {
+                                state_for_install.log(format!("✅ {} instalado. Por favor, reinicia HecateVPN.", installer_name));
+                            }
+                            Err(e) => {
+                                state_for_install.log(format!("❌ Error en instalación: {}", e));
+                            }
+                        }
+                    });
+                } else {
+                    self.state.log(format!("⚠️ Instalación de {} en progreso. Por favor, reinicia la app.", WintunInstaller.name()));
+                }
                 return;
             }
 
-            let peer_ip = self.ui.peer_ip.clone();
-            let peer_port = self.ui.peer_port.clone();
-            let state = self.state.clone();
-
-            self.state.log(format!("🔌 Conectando a {}:{}", peer_ip, peer_port));
-
-            // Spawn connection task
-            tokio::spawn(async move {
-                let peer_addr: String = format!("{}:{}", peer_ip, peer_port);
-                let bind_addr = "0.0.0.0:9000";
-
-                match peer_addr.parse::<std::net::SocketAddr>() {
-                    Ok(peer_socket) => {
-                        match bind_addr.parse::<std::net::SocketAddr>() {
-                            Ok(bind_socket) => {
-                                match NetworkNode::new(bind_socket, peer_socket, state.clone(), "10.0.0.1")
-                                    .await
-                                {
-                                    Ok(node) => {
-                                        state.log("✅ NetworkNode creado".into());
-                                        let shutdown = state.shutdown.clone();
-                                        state.shutdown.store(false, Ordering::Relaxed);
-                                        if let Err(e) = node.run(shutdown).await {
-                                            state.log(format!("❌ Error de conexión: {}", e));
-                                        }
-                                    }
-                                    Err(e) => {
-                                        state.log(format!("❌ Error al crear NetworkNode: {}", e));
-                                    }
-                                }
+            // Check Npcap
+            if !NpcapInstaller.is_installed() {
+                if !self.npcap_install_attempted {
+                    self.npcap_install_attempted = true;
+                    self.state.log(format!("⚠️ {} no encontrado. Iniciando instalación...", NpcapInstaller.name()));
+                    
+                    let state_for_progress = self.state.clone();
+                    let on_progress = Arc::new(tokio::sync::Mutex::new(Box::new(move |msg: String| {
+                        state_for_progress.log(msg);
+                    }) as Box<dyn Fn(String) + Send>));
+                    
+                    let state_for_install = self.state.clone();
+                    let installer_name = NpcapInstaller.name().to_string();
+                    let _install_handle = tokio::spawn(async move {
+                        match NpcapInstaller.install(Some(on_progress)).await {
+                            Ok(_) => {
+                                state_for_install.log(format!("✅ {} instalado. Por favor, reinicia HecateVPN.", installer_name));
                             }
                             Err(e) => {
-                                state.log(format!("❌ Dirección de bind inválida: {}", e));
+                                state_for_install.log(format!("❌ Error en instalación: {}", e));
                             }
                         }
-                    }
-                    Err(e) => {
-                        state.log(format!("❌ Dirección del peer inválida: {}", e));
+                    });
+                } else {
+                    self.state.log(format!("⚠️ Instalación de {} en progreso. Por favor, reinicia la app.", NpcapInstaller.name()));
+                }
+                return;
+            }
+        }
+
+        // All dependencies satisfied - initiate connection
+        self.initiate_connection(peer_ip);
+    }
+
+    /// Validate peer IP and return it, logging errors if invalid
+    fn validate_and_get_peer_ip(&self) -> Option<String> {
+        if self.ui.peer_ip.is_empty() {
+            self.state.log("❌ IP del peer no puede estar vacía".into());
+            return None;
+        }
+        Some(self.ui.peer_ip.clone())
+    }
+
+    /// Initiate the P2P connection with peer
+    fn initiate_connection(&self, peer_ip: String) {
+        let peer_port = self.ui.peer_port.clone();
+        let state = self.state.clone();
+
+        self.state.log(format!("🔌 Conectando a {}:{}", peer_ip, peer_port));
+
+        tokio::spawn(async move {
+            let peer_addr: String = format!("{}:{}", peer_ip, peer_port);
+            let bind_addr = "0.0.0.0:9000";
+
+            match peer_addr.parse::<std::net::SocketAddr>() {
+                Ok(peer_socket) => {
+                    match bind_addr.parse::<std::net::SocketAddr>() {
+                        Ok(bind_socket) => {
+                            match NetworkNode::new(bind_socket, peer_socket, state.clone(), "10.0.0.1")
+                                .await
+                            {
+                                Ok(node) => {
+                                    state.log("✅ NetworkNode creado".into());
+                                    let shutdown = state.shutdown.clone();
+                                    state.shutdown.store(false, Ordering::Relaxed);
+                                    if let Err(e) = node.run(shutdown).await {
+                                        state.log(format!("❌ Error de conexión: {}", e));
+                                    }
+                                }
+                                Err(e) => {
+                                    state.log(format!("❌ Error al crear NetworkNode: {}", e));
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            state.log(format!("❌ Dirección de bind inválida: {}", e));
+                        }
                     }
                 }
-            });
-        }
+                Err(e) => {
+                    state.log(format!("❌ Dirección del peer inválida: {}", e));
+                }
+            }
+        });
     }
 }
 

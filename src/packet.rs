@@ -1,55 +1,69 @@
+//! Network packet structures and serialization
+//! 
+//! Defines the packet format used for P2P communication between peers.
+//! Uses bincode for efficient binary serialization over UDP.
+
 use serde::{Serialize, Deserialize};
 
-/// Packet represents the basic unit exchanged between peers.
-///
-/// In the future this can:
-/// - carry encrypted payloads
-/// - include routing information
-/// - simulate LAN broadcast packets
-
+/// Control message types for peer-to-peer communication
 #[derive(Serialize, Deserialize, Debug)]
 pub enum ControlMessage {
+    /// Initial connection request
     Hello,
+    /// Acknowledgment of connection request
     HelloAck,
+    /// Keep-alive ping request
     Ping,
+    /// Keep-alive ping response
     Pong,
 }
 
+/// Packet payload enum - either control message or raw data
 #[derive(Serialize, Deserialize, Debug)]
 pub enum PacketPayload {
+    /// Control messages for connection management
     Control(ControlMessage),
+    /// Raw data (ethernet frames from TUN device)
     Data(Vec<u8>),
 }
 
-/// Packet structure to encapsulate network frames.
-/// We use bincode for serialize this structure before sending it over UDP.
+/// Network packet structure for P2P communication
+/// 
+/// Every packet exchanged between peers includes:
+/// - Unique ID for tracking
+/// - Protocol ID to filter out non-VPN traffic
+/// - Payload (control message or data)
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Packet {
+    /// Unique packet identifier (random)
     pub id: u64,
-    /// Use protocol ID or magic bytes to filter out garbage traffic from internet
+    /// Protocol magic number (0xDEADBEEF) - filters garbage traffic
     pub protocol_id: u32,
-    /// The raw ethernet frame captured from TAP interface
+    /// Packet content (control or data)
     pub payload: PacketPayload,
 }
 
 impl Packet {
-
+    /// Create a packet with custom payload
     pub fn new(payload: PacketPayload) -> Self {
-         Self {
+        Self {
             id: rand::random(),
             protocol_id: 0xDEADBEEF,
-            payload: payload,
+            payload,
         }
     }
 
+    /// Serialize packet to binary format (bincode)
     pub fn encode(&self) -> Vec<u8> {
         bincode::serialize(self).unwrap()
     }
 
+    /// Deserialize packet from binary format
     pub fn decode(data: &[u8]) -> anyhow::Result<Self> {
         Ok(bincode::deserialize(data)?)
     }
 
+    /// Factory method: Create a PING keep-alive packet
     pub fn ping() -> Self {
         Self {
             id: rand::random(),
@@ -58,7 +72,8 @@ impl Packet {
         }
     }
 
-     pub fn pong() -> Self {
+    /// Factory method: Create a PONG response packet
+    pub fn pong() -> Self {
         Self {
             id: rand::random(),
             protocol_id: 0xDEADBEEF,
@@ -66,7 +81,8 @@ impl Packet {
         }
     }
 
-     pub fn data(bytes: Vec<u8>) -> Self {
+    /// Factory method: Create a data packet from raw bytes
+    pub fn data(bytes: Vec<u8>) -> Self {
         Self {
             id: rand::random(),
             protocol_id: 0xDEADBEEF,
@@ -74,6 +90,7 @@ impl Packet {
         }
     }
 
+    /// Factory method: Create a HELLO connection request packet
     pub fn hello() -> Self {
         Self {
             id: rand::random(),
@@ -82,6 +99,7 @@ impl Packet {
         }
     }
 
+    /// Factory method: Create a HELLO_ACK response packet
     pub fn hello_ack() -> Self {
         Self {
             id: rand::random(),
@@ -89,6 +107,4 @@ impl Packet {
             payload: PacketPayload::Control(ControlMessage::HelloAck),
         }
     }
-
 }
-

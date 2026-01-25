@@ -4,23 +4,30 @@ use tokio::net::UdpSocket;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Global application state shared across UI and network layers
+/// Implements thread-safe atomic variables for state coordination
 pub struct AppState {
+    /// Local machine IP address
     pub my_ip: String,
-
-    pub peer_ip: Arc<Mutex<String>>,
-    pub peer_port: Arc<Mutex<String>>, // optional
-    pub virtual_ip: String,            // IP inside VPN
-
+    /// Flag indicating active connection status
     pub connected: Arc<AtomicBool>,
+    /// Flag to signal shutdown to all async tasks
     pub shutdown: Arc<AtomicBool>,
-    pub connection_handle: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
+    /// Timestamp of last activity (NAT keep-alive tracking)
     pub last_seen: AtomicU64,
+    /// Application log messages for UI display
     pub logs: Arc<Mutex<Vec<String>>>,
-    pub shared_socket: Arc<Mutex<Option<Arc<UdpSocket>>>>, // Shared UDP socket
+    /// Shared UDP socket for P2P communication
+    pub shared_socket: Arc<Mutex<Option<Arc<UdpSocket>>>>,
 }
 
 impl AppState {
-    pub fn new(my_ip: String, peer_port: String) -> Self {
+    /// Factory method: Create new application state
+    /// 
+    /// # Arguments
+    /// * `my_ip` - Local machine IP address
+    /// * `_peer_port` - Reserved for future use (currently unused)
+    pub fn new(my_ip: String, _peer_port: String) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -28,18 +35,16 @@ impl AppState {
             
         Self {
             my_ip: my_ip.trim().to_string(),
-            peer_ip: Arc::new(Mutex::new(String::new())),
-            peer_port: Arc::new(Mutex::new(peer_port)),
-            virtual_ip: "10.0.0.1".to_string(),
             connected: Arc::new(AtomicBool::new(false)),
             shutdown: Arc::new(AtomicBool::new(false)),
-            connection_handle: Arc::new(Mutex::new(None)),
             logs: Arc::new(Mutex::new(Vec::new())),
             last_seen: AtomicU64::new(now),
             shared_socket: Arc::new(Mutex::new(None)),
         }
     }
 
+    /// Update the last activity timestamp
+    /// Used for NAT keep-alive and connection timeout tracking
     pub fn update_last_seen(&self) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -48,6 +53,8 @@ impl AppState {
         self.last_seen.store(now, Ordering::Relaxed);
     }
 
+    /// Add a log message to the internal log buffer
+    /// Messages are displayed in the UI and automatically trimmed to 150 items
     pub fn log(&self, message: String) {
         let mut logs = self.logs.lock().unwrap();
 

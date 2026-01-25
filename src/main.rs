@@ -62,6 +62,7 @@ async fn main() -> eframe::Result<()> {
         power_on_texture: None,
         power_off_texture: None,
         wintun_install_attempted: false,
+        npcap_install_attempted: false,
     };
 
     let native_options = eframe::NativeOptions {

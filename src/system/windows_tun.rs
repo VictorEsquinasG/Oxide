@@ -6,7 +6,6 @@
 pub mod windows_tun {
     use super::super::tun_device::TunDeviceImpl;
     use anyhow::Result;
-    use std::io::{Read, Write};
 
     /// Windows TUN device wrapper using Wintun
     pub struct WindowsTunDevice {

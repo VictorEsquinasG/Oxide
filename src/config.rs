@@ -1,35 +1,38 @@
+//! Configuration management module
+//! 
+//! Currently unused - configuration is handled entirely through the GUI.
+//! Reserved for future implementation of file-based or CLI configuration.
+
 use std::net::SocketAddr;
 
-/// Config holds all runtime configuration.
-///
-/// This struct is intentionally simple.
-/// In the future it can be populated by:
-/// - GUI
-/// - config file (TOML)
-/// - environment variables
+/// Configuration placeholder for future use
+/// 
+/// Intended for future support of:
+/// - Configuration files (TOML/JSON)
+/// - Environment variables
+/// - CLI arguments
+/// 
+/// Currently all configuration comes from the UI layer.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Config {
     /// Local address to bind the UDP socket
     pub bind_addr: SocketAddr,
-
     /// Remote peer address
     pub peer_addr: SocketAddr,
 }
 
 impl Config {
-    /// Creates a Config from command-line arguments.
-    ///
-    /// Usage:
-    /// mini-lan-bridge <bind_addr> <peer_addr>
-    ///
-    /// Example:
-    /// mini-lan-bridge 0.0.0.0:9000 192.168.1.50:9000
+    /// Parse configuration from command-line arguments (future use)
+    /// 
+    /// Currently unused but reserved for CLI support.
+    #[allow(dead_code)]
     pub fn from_args() -> Self {
         let args: Vec<String> = std::env::args().collect();
 
         if args.len() != 3 {
             eprintln!("Usage:");
-            eprintln!("  mini-lan-bridge <bind_addr> <peer_addr>");
+            eprintln!("  hecate-vpn <bind_addr> <peer_addr>");
             std::process::exit(1);
         }
 

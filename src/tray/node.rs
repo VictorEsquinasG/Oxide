@@ -53,7 +53,7 @@ pub fn spawn_tray(state: Arc<AppState>) {
         menu.append(&quit_item).unwrap();
 
         // ───── Tray ─────
-        let tray = TrayIconBuilder::new()
+        let _tray = TrayIconBuilder::new()
             .with_menu(Box::new(menu))
             .with_icon(icon_red.clone())
             .with_tooltip("Mini LAN Bridge")
@@ -75,11 +75,11 @@ pub fn spawn_tray(state: Arc<AppState>) {
 
             if connected != last_connected {
                 if connected {
-                    let _ = tray.set_icon(Some(icon_green.clone()));
-                    let _ = tray.set_tooltip(Some("Mini LAN Bridge — Connected"));
+                    let _ = _tray.set_icon(Some(icon_green.clone()));
+                    let _ = _tray.set_tooltip(Some("Mini LAN Bridge — Connected"));
                 } else {
-                    let _ = tray.set_icon(Some(icon_red.clone()));
-                    let _ = tray.set_tooltip(Some("Mini LAN Bridge — Disconnected"));
+                    let _ = _tray.set_icon(Some(icon_red.clone()));
+                    let _ = _tray.set_tooltip(Some("Mini LAN Bridge — Disconnected"));
                 }
 
                 last_connected = connected;

@@ -1,9 +1,16 @@
+//! Wintun driver management
+//! 
+//! Handles automatic detection and installation of Wintun,
+//! a userspace TUN driver for Windows.
+//! 
+//! Wintun is embedded in dependences/wireguard-installer.exe
+
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-
 use std::process::{Command, Stdio};
 use std::time::Duration;
+use crate::system::installer::SystemInstaller;
 
 const WG_INSTALLER: &[u8] = include_bytes!("../../dependences/wireguard-installer.exe");
 const WINTUN_MARKER_FILE: &str = "wintun_installed.marker";
@@ -18,20 +25,37 @@ fn get_marker_path() -> PathBuf {
     hecate_dir.join(WINTUN_MARKER_FILE)
 }
 
+/// Wintun driver installer
+pub struct WintunInstaller;
+
+impl SystemInstaller for WintunInstaller {
+    fn name(&self) -> &str {
+        "Wintun"
+    }
+
+    fn is_installed(&self) -> bool {
+        is_wintun_installed()
+    }
+
+    fn install(&self, on_progress: Option<Arc<Mutex<Box<dyn Fn(String) + Send>>>>) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>> {
+        Box::pin(install_wintun(on_progress))
+    }
+}
+
 /// Check if wintun.dll is installed and accessible
 pub fn is_wintun_installed() -> bool {
-    // En Linux, Wintun no es necesario, retornamos true automáticamente
+    // On non-Windows platforms, Wintun is not needed
     #[cfg(not(windows))]
     return true;
 
     #[cfg(windows)]
     {
-        // Método 1: Verificar si el archivo marker existe (instalación anterior)
+        // Method 1: Check if marker file exists from previous installation
         if get_marker_path().exists() {
             return true;
         }
 
-        // Método 2: Verificar la DLL en rutas estándar
+        // Method 2: Check for DLL in standard system paths
         let dll_paths = [
             "C:\\Windows\\System32\\wintun.dll",
             "C:\\Windows\\SysWOW64\\wintun.dll",
@@ -44,7 +68,7 @@ pub fn is_wintun_installed() -> bool {
             }
         }
 
-        // Método 3: Verificar mediante pnputil (menos confiable pero intenta)
+        // Method 3: Check via pnputil (less reliable but attempt anyway)
         let result = Command::new("pnputil")
             .arg("/enum-drivers")
             .output()
@@ -90,10 +114,10 @@ pub async fn install_wintun(on_progress: Option<Arc<Mutex<Box<dyn Fn(String) + S
 
     // Progress bar stages
     let stages = vec![
-        ("📦 Extrayendo instalador...", 20),
-        ("⏳ Preparando instalador...", 40),
-        ("⚙️ Ejecutando instalador de WireGuard...", 60),
-        ("🔄 Configurando servicio de túnel...", 80),
+        ("📦 Extracting installer...", 20),
+        ("⏳ Preparing installer...", 40),
+        ("⚙️ Running WireGuard installer...", 60),
+        ("🔄 Configuring tunnel service...", 80),
     ];
 
     for (stage, percent) in &stages {
@@ -114,12 +138,12 @@ pub async fn install_wintun(on_progress: Option<Arc<Mutex<Box<dyn Fn(String) + S
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     }
 
-    progress("📦 Extrayendo instalador...".to_string());
+    progress("📦 Extracting installer...".to_string());
     
     let installer = extract_wireguard_installer();
     
-    progress("⏳ Ejecutando instalador de WireGuard...".to_string());
-    progress("(Este proceso puede tomar 1-2 minutos)".to_string());
+    progress("⏳ Running WireGuard installer...".to_string());
+    progress("(This process may take 1-2 minutes)".to_string());
     progress("".to_string()); // blank line
 
     let mut child = Command::new(&installer)
@@ -137,7 +161,7 @@ pub async fn install_wintun(on_progress: Option<Arc<Mutex<Box<dyn Fn(String) + S
         match child.try_wait() {
             Ok(Some(status)) => {
                 if !status.success() {
-                    progress("❌ Error: Instalador de WireGuard falló".to_string());
+                    progress("❌ Error: WireGuard installer failed".to_string());
                     anyhow::bail!("WireGuard installer failed with exit code: {:?}", status.code());
                 }
                 break;
@@ -146,13 +170,13 @@ pub async fn install_wintun(on_progress: Option<Arc<Mutex<Box<dyn Fn(String) + S
                 // Still running
                 if start.elapsed() > timeout {
                     let _ = child.kill();
-                    progress("❌ Error: Timeout esperando al instalador (5 minutos)".to_string());
+                    progress("❌ Error: Timeout waiting for installer (5 minutes)".to_string());
                     anyhow::bail!("WireGuard installer timeout");
                 }
                 tokio::time::sleep(Duration::from_millis(500)).await;
             }
             Err(e) => {
-                progress(format!("❌ Error ejecutando instalador: {}", e));
+                progress(format!("❌ Error running installer: {}", e));
                 anyhow::bail!("Failed to spawn installer: {}", e);
             }
         }
@@ -160,12 +184,10 @@ pub async fn install_wintun(on_progress: Option<Arc<Mutex<Box<dyn Fn(String) + S
 
     // Success messages with progress
     progress("".to_string()); // blank line
-    progress("╔════════════════════════════════════════╗".to_string());
-    progress("║  ✅ ¡INSTALACIÓN EXITOSA!            ║".to_string());
-    progress("║  🎉 Wintun está listo para usar       ║".to_string());
-    progress("╚════════════════════════════════════════╝".to_string());
+    progress("✅ INSTALLATION SUCCESSFUL!".to_string());
+    progress("🎉 Wintun is ready to use".to_string());
     progress("".to_string()); // blank line
-    progress("👉 Por favor, cierra esta ventana y reinicia HecateVPN".to_string());
+    progress("👉 Please close this window and restart HecateVPN".to_string());
     progress("".to_string()); // blank line
     
     // Create marker file to prevent reinstallation
@@ -176,3 +198,5 @@ pub async fn install_wintun(on_progress: Option<Arc<Mutex<Box<dyn Fn(String) + S
 
     Ok(())
 }
+
+

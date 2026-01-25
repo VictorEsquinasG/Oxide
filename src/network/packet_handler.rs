@@ -1,16 +1,26 @@
-/// Simple packet handling for VPN
-/// Supports ARP and basic IPv4 packet manipulation
-/// Used to handle LAN emulation without full TCP/IP stack
+//! Packet handler module - ARP and IPv4 packet manipulation
+//! 
+//! Provides utilities for parsing and generating ARP replies in the VPN tunnel.
+//! This enables LAN emulation by automatically responding to ARP requests.
 
 use pnet::packet::arp::{ArpOperations, ArpPacket, MutableArpPacket};
 use pnet::packet::ethernet::{EtherTypes, EthernetPacket, MutableEthernetPacket};
-use pnet::packet::ipv4::{Ipv4Packet};
 use pnet::packet::Packet;
 use pnet::util::MacAddr;
 use std::net::Ipv4Addr;
 
-/// Handle incoming ARP packets
-/// Automatically responds to ARP requests
+/// Handle incoming ARP request packets
+/// 
+/// Automatically generates ARP reply for requests matching our IP address.
+/// This enables the VPN to emulate a physical LAN interface.
+/// 
+/// # Arguments
+/// * `packet` - Raw packet bytes from TUN device
+/// * `our_mac` - MAC address to respond with
+/// * `our_ip` - IPv4 address to respond with
+/// 
+/// # Returns
+/// Some(reply_packet) if this is an ARP request for our IP, None otherwise
 pub fn handle_arp_request(
     packet: &[u8],
     our_mac: MacAddr,
@@ -61,37 +71,4 @@ pub fn handle_arp_request(
     eth_reply.set_payload(&arp_response);
     
     Some(eth_response)
-}
-
-/// Check if packet is an IPv4 data packet (not ARP/control)
-pub fn is_ipv4_packet(packet: &[u8]) -> bool {
-    let eth = match EthernetPacket::new(packet) {
-        Some(p) => p,
-        None => return false,
-    };
-    
-    eth.get_ethertype() == EtherTypes::Ipv4
-}
-
-/// Extract IPv4 packet from Ethernet frame
-pub fn get_ipv4_payload(packet: &[u8]) -> Option<Vec<u8>> {
-    let eth = EthernetPacket::new(packet)?;
-    
-    if eth.get_ethertype() != EtherTypes::Ipv4 {
-        return None;
-    }
-    
-    Some(eth.payload().to_vec())
-}
-
-/// Get source IP from IPv4 packet
-pub fn get_source_ip(ipv4_packet: &[u8]) -> Option<Ipv4Addr> {
-    let packet = Ipv4Packet::new(ipv4_packet)?;
-    Some(packet.get_source())
-}
-
-/// Get destination IP from IPv4 packet
-pub fn get_dest_ip(ipv4_packet: &[u8]) -> Option<Ipv4Addr> {
-    let packet = Ipv4Packet::new(ipv4_packet)?;
-    Some(packet.get_destination())
 }
