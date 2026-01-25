@@ -48,7 +48,7 @@ fn main() {
         if !found {
             println!("cargo:warning=⚠ Npcap SDK not found in standard locations");
             println!("cargo:warning=The application will attempt to install it automatically at runtime");
-            println!("cargo:warning=No linking attempted - Npcap installation will be handled in-app");
+            println!("cargo:warning=Packet functions will be dynamically loaded - no static linking required");
         }
     }
 

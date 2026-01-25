@@ -2,11 +2,19 @@
 //! 
 //! Provides utilities for parsing and generating ARP replies in the VPN tunnel.
 //! This enables LAN emulation by automatically responding to ARP requests.
+//!
+//! Note: This module is only compiled when the 'pnet' feature is enabled,
+//! which requires Npcap SDK (Windows) or equivalent packet libraries.
 
+#[cfg(feature = "pnet")]
 use pnet::packet::arp::{ArpOperations, ArpPacket, MutableArpPacket};
+#[cfg(feature = "pnet")]
 use pnet::packet::ethernet::{EtherTypes, EthernetPacket, MutableEthernetPacket};
+#[cfg(feature = "pnet")]
 use pnet::packet::Packet;
+#[cfg(feature = "pnet")]
 use pnet::util::MacAddr;
+#[cfg(feature = "pnet")]
 use std::net::Ipv4Addr;
 
 /// Handle incoming ARP request packets
@@ -21,6 +29,7 @@ use std::net::Ipv4Addr;
 /// 
 /// # Returns
 /// Some(reply_packet) if this is an ARP request for our IP, None otherwise
+#[cfg(feature = "pnet")]
 pub fn handle_arp_request(
     packet: &[u8],
     our_mac: MacAddr,
