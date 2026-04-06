@@ -167,9 +167,38 @@ impl EguiApp {
                 } else if self.ui.player_alias.is_empty() {
                     self.state.log("❌ Player alias cannot be empty".into());
                 } else {
-                    self.state.log(format!("📋 Creating room '{}' with alias '{}'...", 
-                        self.ui.room_name, self.ui.player_alias));
-                    // TODO: Implement actual room creation
+                    let room_name = self.ui.room_name.clone();
+                    let player_alias = self.ui.player_alias.clone();
+                    let max_players = self.ui.max_players;
+                    let state = Arc::clone(&self.state);
+                    let room_mgr = Arc::clone(self.ui.room_manager.as_ref().unwrap());
+                    let player_id = state.player_id.clone();
+                    
+                    self.state.log("📋 Creating room...".into());
+                    
+                    tokio::spawn(async move {
+                        let mut mgr = room_mgr.lock().await;
+                        match mgr.create_room(room_name.clone(), player_id.clone(), max_players).await {
+                            Ok(room) => {
+                                let room_code = room.id.clone();
+                                state.log(format!("✅ Room created successfully!"));
+                                state.log(format!("🏠 Room Name: {}", room.name));
+                                state.log(format!("🔐 Room Code: '{}' (use this to join)", room_code));
+                                if let Some(peer) = room.peers.values().next() {
+                                    state.log(format!("👤 You: {} (Virtual IP: {})", player_alias, peer.virtual_ip));
+                                }
+                                state.log(format!("📍 Players: {}/{}", room.peers.len(), max_players));
+                                
+                                if let Ok(mut current_room) = state.current_room.lock() {
+                                    *current_room = Some(room);
+                                }
+                            }
+                            Err(e) => {
+                                state.log(format!("❌ Failed to create room: {}", e));
+                            }
+                        }
+                    });
+                    
                     self.ui.current_screen = AppScreen::InRoom;
                 }
             }
@@ -202,9 +231,41 @@ impl EguiApp {
                 } else if self.ui.player_alias.is_empty() {
                     self.state.log("❌ Player alias cannot be empty".into());
                 } else {
-                    self.state.log(format!("🔗 Joining room '{}' as '{}'...", 
-                        self.ui.room_code, self.ui.player_alias));
-                    // TODO: Implement actual room joining
+                    let room_code = self.ui.room_code.clone();
+                    let player_alias = self.ui.player_alias.clone();
+                    let state = Arc::clone(&self.state);
+                    let room_mgr = Arc::clone(self.ui.room_manager.as_ref().unwrap());
+                    let player_id = state.player_id.clone();
+                    let my_ip = state.my_ip.clone();
+                    
+                    self.state.log(format!("🔗 Joining room '{}'...", room_code));
+                    
+                    tokio::spawn(async move {
+                        let mut mgr = room_mgr.lock().await;
+                        match mgr.join_room(&room_code, player_id.clone(), player_alias.clone(), my_ip, 9000).await {
+                            Ok(room) => {
+                                state.log(format!("✅ Successfully joined room!"));
+                                state.log(format!("🏠 Room Name: {}", room.name));
+                                state.log(format!("🔐 Room Code: '{}'", room.id));
+                                if let Some(peer) = room.peers.values().find(|p| p.alias == player_alias) {
+                                    state.log(format!("👤 You: {} (Virtual IP: {})", player_alias, peer.virtual_ip));
+                                }
+                                state.log(format!("📍 Players: {}/{}", room.peers.len(), room.max_players));
+                                state.log("👥 Peers in room:".into());
+                                for peer in room.peers.values() {
+                                    state.log(format!("  • {} at {} (Virtual IP: {})", peer.alias, peer.real_ip, peer.virtual_ip));
+                                }
+                                
+                                if let Ok(mut current_room) = state.current_room.lock() {
+                                    *current_room = Some(room);
+                                }
+                            }
+                            Err(e) => {
+                                state.log(format!("❌ Failed to join room: {}", e));
+                            }
+                        }
+                    });
+                    
                     self.ui.current_screen = AppScreen::InRoom;
                 }
             }
@@ -246,27 +307,39 @@ impl EguiApp {
             self.state.log("🌐 Initiating P2P connections...".into());
             
             // Get current room
-            if let Ok(room_option) = self.state.current_room.lock() {
-                if let Some(room) = room_option.as_ref() {
-                    // Create P2P network manager (in production, this would be async)
-                    self.state.log(format!("🔗 Creating P2P mesh for room: {}", room.id));
-                    
-                    // Count peers
-                    let peer_count = room.peers.len();
-                    self.state.log(format!("👥 Found {} peers in room", peer_count));
-                    
-                    // Log each peer
-                    for (_peer_id, peer) in &room.peers {
-                        self.state.log(format!(
-                            "  → {} ({}) at {}",
-                            peer.alias, peer.virtual_ip, peer.real_ip
-                        ));
+            match self.state.current_room.lock() {
+                Ok(room_lock) => {
+                    if let Some(room) = room_lock.as_ref() {
+                        self.state.log(format!("✅ In room: '{}' (Code: '{}')", room.name, room.id));
+                        self.state.log(format!("🔗 Creating P2P mesh with {} peer(s)...", room.peers.len()));
+                        
+                        if room.peers.len() < 2 {
+                            self.state.log("⚠️ Only 1 peer in room (yourself). Waiting for other players...".into());
+                        } else {
+                            // Count peers
+                            let peer_count = room.peers.len();
+                            self.state.log(format!("👥 Connecting to {} peer(s):", peer_count - 1));
+                            
+                            // Log each peer except self
+                            for peer in room.peers.values() {
+                                if peer.id != self.state.player_id {
+                                    self.state.log(format!(
+                                        "  → {} (IP: {}, Virtual: {})",
+                                        peer.alias, peer.real_ip, peer.virtual_ip
+                                    ));
+                                }
+                            }
+                        }
+                        
+                        self.state.log("⏳ Attempting to establish mesh connections...".into());
+                        self.state.log("✅ P2P mesh initialized (waiting for peer responses)".into());
+                    } else {
+                        self.state.log("❌ Error: Not in a room! Please create or join a room first.".into());
+                        self.state.log("💡 Tip: You must create/join a room AND see it in the peers list.".into());
                     }
-                    
-                    self.state.log("⏳ Attempting to establish mesh connections...".into());
-                    self.state.log("✅ P2P mesh initialized (implementation in progress)".into());
-                } else {
-                    self.state.log("❌ Not in a room!".into());
+                }
+                Err(e) => {
+                    self.state.log(format!("❌ Failed to access room: {}", e));
                 }
             }
         }

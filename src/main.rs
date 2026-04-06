@@ -49,11 +49,25 @@ async fn main() -> eframe::Result<()> {
     state.log("📡 Arquitectura: TUN Virtual Interface + UDP P2P".into());
     state.log("✅ Sistema listo para conectar".into());
 
+    // ===================== ROOM MANAGER =====================
+    // Initialize RoomManager for room creation/joining
+    let room_manager = match room_manager::RoomManager::new("Player".to_string()).await {
+        Ok(manager) => {
+            state.log("✅ Room Manager initialized successfully".into());
+            Some(Arc::new(tokio::sync::Mutex::new(manager)))
+        }
+        Err(e) => {
+            state.log(format!("❌ Failed to initialize Room Manager: {}", e));
+            None
+        }
+    };
+
     // ===================== SYSTEM TRAY =====================
     let _tray = tray::node::spawn_tray(state.clone());
     
     // ===================== GUI APP =====================
-    let app = EguiApp::new(state.clone());
+    let mut app = EguiApp::new(state.clone());
+    app.ui.room_manager = room_manager;
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
