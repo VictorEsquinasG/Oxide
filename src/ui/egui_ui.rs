@@ -178,6 +178,10 @@ impl EguiApp {
                     
                     tokio::spawn(async move {
                         let mut mgr = room_mgr.lock().await;
+                        // Reload to ensure we have latest rooms
+                        if let Err(e) = mgr.reload().await {
+                            state.log(format!("⚠️ Warning: Could not reload rooms: {}", e));
+                        }
                         match mgr.create_room(room_name.clone(), player_id.clone(), max_players).await {
                             Ok(room) => {
                                 let room_code = room.id.clone();
@@ -242,6 +246,10 @@ impl EguiApp {
                     
                     tokio::spawn(async move {
                         let mut mgr = room_mgr.lock().await;
+                        // Reload to get latest rooms from other instances
+                        if let Err(e) = mgr.reload().await {
+                            state.log(format!("⚠️ Warning: Could not reload rooms: {}", e));
+                        }
                         match mgr.join_room(&room_code, player_id.clone(), player_alias.clone(), my_ip, 9000).await {
                             Ok(room) => {
                                 state.log(format!("✅ Successfully joined room!"));
@@ -445,7 +453,12 @@ impl App for EguiApp {
 
             // ===================== LOGS =====================
             ui.separator();
-            ui.label("📋 Activity Log:");
+            ui.horizontal(|ui| {
+                ui.label("📋 Activity Log:");
+                if ui.button("🗑️ Clear").clicked() {
+                    self.state.logs.lock().unwrap().clear();
+                }
+            });
             egui::ScrollArea::vertical()
                 .auto_shrink([false; 2])
                 .show(ui, |ui| {

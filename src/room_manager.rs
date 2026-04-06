@@ -174,6 +174,24 @@ impl RoomManager {
             .collect()
     }
 
+    /// Reload config from file (for multi-instance support)
+    pub async fn reload(&mut self) -> Result<(), String> {
+        match Self::load_config_from_file(&self.config_path).await {
+            Ok(config) => {
+                self.config = config;
+                Ok(())
+            }
+            Err(e) => {
+                // If file doesn't exist, it's fine - just keep current config
+                if self.config_path.exists() {
+                    Err(e)
+                } else {
+                    Ok(())
+                }
+            }
+        }
+    }
+
     /// Delete a room
     pub async fn delete_room(&mut self, room_id: &str) -> Result<(), String> {
         self.config.delete_room(room_id)?;
