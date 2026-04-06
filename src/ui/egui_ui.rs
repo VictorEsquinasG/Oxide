@@ -1,18 +1,45 @@
-use eframe::egui; // Import egui to use TextureOptions and ColorImage
+use eframe::egui;
 use eframe::App;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use crate::app::AppState;
-use std::sync::Arc;
 use crate::network::node::NetworkNode;
+use crate::room_manager::RoomManager;
 
-#[cfg(windows)]
-use crate::system::{SystemInstaller, WintunInstaller, NpcapInstaller};
+/// Represents the current screen being displayed
+/// Represents the current screen being displayed
+#[derive(Debug, Clone, PartialEq)]
+pub enum AppScreen {
+    /// Main menu: Create or Join room
+    MainMenu,
+    /// Creating a new room
+    CreateRoom,
+    /// Joining an existing room
+    JoinRoom,
+    /// Inside a room, showing players and status
+    InRoom,
+    /// Legacy mode (direct P2P connection)
+    Legacy,
+}
 
-#[derive(Default)]
 pub struct UiState {
+    /// For legacy mode
     pub peer_ip: String,
     pub peer_port: String,
+    
+    /// For room creation
+    pub room_name: String,
+    pub player_alias: String,
+    pub max_players: u32,
+    
+    /// For joining room
+    pub room_code: String,
+    
+    /// UI state
+    pub current_screen: AppScreen,
+    #[allow(dead_code)]
+    pub room_manager: Option<Arc<tokio::sync::Mutex<RoomManager>>>,
 }
 
 pub struct EguiApp {
@@ -20,16 +47,26 @@ pub struct EguiApp {
     pub ui: UiState,
     pub power_on_texture: Option<egui::TextureHandle>,
     pub power_off_texture: Option<egui::TextureHandle>,
+    #[allow(dead_code)]
     pub wintun_install_attempted: bool,
+    #[allow(dead_code)]
     pub npcap_install_attempted: bool,
 }
 
 impl EguiApp {
-    // Constructor to initialize the app with empty textures
     pub fn new(state: Arc<AppState>) -> Self {
         Self {
             state,
-            ui: UiState::default(),
+            ui: UiState {
+                peer_ip: String::new(),
+                peer_port: "9000".to_string(),
+                room_name: String::new(),
+                player_alias: String::new(),
+                max_players: 4,
+                room_code: String::new(),
+                current_screen: AppScreen::MainMenu,
+                room_manager: None,
+            },
             power_on_texture: None,
             power_off_texture: None,
             wintun_install_attempted: false,
@@ -66,104 +103,195 @@ impl EguiApp {
         }
     }
 
-    fn toggle_connection(&mut self) {
-        // Single return pattern: determine action early with guards
-        let should_disconnect = self.state.connected.load(Ordering::Relaxed);
+    fn render_header(&self, ui: &mut egui::Ui) {
+        ui.heading("🎮 HecateVPN - Family LAN Gaming");
         
-        if should_disconnect {
-            // Disconnect path
-            self.state.shutdown.store(true, Ordering::Relaxed);
-            self.state.connected.store(false, Ordering::Relaxed);
-            self.state.log("🛑 Disconnecting...".into());
-            return;
-        }
-
-        // Connect path - validate peer IP
-        let Some(peer_ip) = self.validate_and_get_peer_ip() else {
-            return;
-        };
-
-        // Check system dependencies (Windows only)
-        #[cfg(windows)]
-        {
-            // Check Wintun first
-            if !WintunInstaller.is_installed() {
-                if !self.wintun_install_attempted {
-                    self.wintun_install_attempted = true;
-                    self.state.log(format!("⚠️ {} no encontrado. Iniciando instalación...", WintunInstaller.name()));
-                    
-                    let state_for_progress = self.state.clone();
-                    let on_progress = Arc::new(tokio::sync::Mutex::new(Box::new(move |msg: String| {
-                        state_for_progress.log(msg);
-                    }) as Box<dyn Fn(String) + Send>));
-                    
-                    let state_for_install = self.state.clone();
-                    let installer_name = WintunInstaller.name().to_string();
-                    let _install_handle = tokio::spawn(async move {
-                        match WintunInstaller.install(Some(on_progress)).await {
-                            Ok(_) => {
-                                state_for_install.log(format!("✅ {} instalado. Por favor, reinicia HecateVPN.", installer_name));
-                            }
-                            Err(e) => {
-                                state_for_install.log(format!("❌ Error en instalación: {}", e));
-                            }
-                        }
-                    });
-                } else {
-                    self.state.log(format!("⚠️ Instalación de {} en progreso. Por favor, reinicia la app.", WintunInstaller.name()));
-                }
-                return;
+        ui.horizontal(|ui| {
+            if self.state.connected.load(Ordering::Relaxed) {
+                ui.colored_label(egui::Color32::GREEN, "● Connected");
+            } else {
+                ui.colored_label(egui::Color32::RED, "● Disconnected");
             }
-
-            // Check Npcap
-            if !NpcapInstaller.is_installed() {
-                if !self.npcap_install_attempted {
-                    self.npcap_install_attempted = true;
-                    self.state.log(format!("⚠️ {} no encontrado. Iniciando instalación...", NpcapInstaller.name()));
-                    
-                    let state_for_progress = self.state.clone();
-                    let on_progress = Arc::new(tokio::sync::Mutex::new(Box::new(move |msg: String| {
-                        state_for_progress.log(msg);
-                    }) as Box<dyn Fn(String) + Send>));
-                    
-                    let state_for_install = self.state.clone();
-                    let installer_name = NpcapInstaller.name().to_string();
-                    let _install_handle = tokio::spawn(async move {
-                        match NpcapInstaller.install(Some(on_progress)).await {
-                            Ok(_) => {
-                                state_for_install.log(format!("✅ {} instalado. Por favor, reinicia HecateVPN.", installer_name));
-                            }
-                            Err(e) => {
-                                state_for_install.log(format!("❌ Error en instalación: {}", e));
-                            }
-                        }
-                    });
-                } else {
-                    self.state.log(format!("⚠️ Instalación de {} en progreso. Por favor, reinicia la app.", NpcapInstaller.name()));
-                }
-                return;
-            }
-        }
-
-        // All dependencies satisfied - initiate connection
-        self.initiate_connection(peer_ip);
+            ui.separator();
+            ui.label(format!("Local IP: {}", self.state.my_ip));
+        });
+        ui.separator();
     }
 
-    /// Validate peer IP and return it, logging errors if invalid
-    fn validate_and_get_peer_ip(&self) -> Option<String> {
-        if self.ui.peer_ip.is_empty() {
-            self.state.log("❌ IP del peer no puede estar vacía".into());
-            return None;
+    fn render_main_menu(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Welcome to HecateVPN!");
+        ui.label("🎮 Play LAN games with your family remotely");
+        
+        ui.separator();
+        
+        ui.vertical_centered(|ui| {
+            if ui.button("➕ Create a Room").clicked() {
+                self.ui.current_screen = AppScreen::CreateRoom;
+            }
+            
+            if ui.button("➕ Join a Room").clicked() {
+                self.ui.current_screen = AppScreen::JoinRoom;
+            }
+            
+            if ui.button("⚙️ Legacy Mode (Direct P2P)").clicked() {
+                self.ui.current_screen = AppScreen::Legacy;
+            }
+        });
+        
+        ui.separator();
+        
+        if ui.button("❌ Exit").clicked() {
+            std::process::exit(0);
         }
-        Some(self.ui.peer_ip.clone())
     }
 
-    /// Initiate the P2P connection with peer
-    fn initiate_connection(&self, peer_ip: String) {
+    fn render_create_room(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Create a New Room");
+        
+        ui.label("Room Name:");
+        ui.text_edit_singleline(&mut self.ui.room_name);
+        
+        ui.label("Your Alias:");
+        ui.text_edit_singleline(&mut self.ui.player_alias);
+        
+        ui.label("Max Players:");
+        ui.add(egui::Slider::new(&mut self.ui.max_players, 2..=10));
+        ui.label(format!("{} players", self.ui.max_players));
+        
+        ui.separator();
+        
+        ui.horizontal(|ui| {
+            if ui.button("✅ Create Room").clicked() {
+                if self.ui.room_name.is_empty() {
+                    self.state.log("❌ Room name cannot be empty".into());
+                } else if self.ui.player_alias.is_empty() {
+                    self.state.log("❌ Player alias cannot be empty".into());
+                } else {
+                    self.state.log(format!("📋 Creating room '{}' with alias '{}'...", 
+                        self.ui.room_name, self.ui.player_alias));
+                    // TODO: Implement actual room creation
+                    self.ui.current_screen = AppScreen::InRoom;
+                }
+            }
+            
+            if ui.button("↩️ Back").clicked() {
+                self.ui.current_screen = AppScreen::MainMenu;
+                self.ui.room_name.clear();
+                self.ui.player_alias.clear();
+                self.ui.max_players = 4;
+            }
+        });
+    }
+
+    fn render_join_room(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Join a Room");
+        
+        ui.label("Enter Room Code:");
+        ui.text_edit_singleline(&mut self.ui.room_code);
+        ui.label("Example: Alpha-Fox-2025");
+        
+        ui.label("Your Alias:");
+        ui.text_edit_singleline(&mut self.ui.player_alias);
+        
+        ui.separator();
+        
+        ui.horizontal(|ui| {
+            if ui.button("✅ Join Room").clicked() {
+                if self.ui.room_code.is_empty() {
+                    self.state.log("❌ Room code cannot be empty".into());
+                } else if self.ui.player_alias.is_empty() {
+                    self.state.log("❌ Player alias cannot be empty".into());
+                } else {
+                    self.state.log(format!("🔗 Joining room '{}' as '{}'...", 
+                        self.ui.room_code, self.ui.player_alias));
+                    // TODO: Implement actual room joining
+                    self.ui.current_screen = AppScreen::InRoom;
+                }
+            }
+            
+            if ui.button("↩️ Back").clicked() {
+                self.ui.current_screen = AppScreen::MainMenu;
+                self.ui.room_code.clear();
+                self.ui.player_alias.clear();
+            }
+        });
+    }
+
+    fn render_in_room(&mut self, ui: &mut egui::Ui) {
+        if let Ok(room) = self.state.current_room.lock() {
+            if let Some(room) = room.as_ref() {
+                ui.heading(format!("🏠 Room: {}", room.name));
+                ui.label(format!("Code: {}", room.id));
+                ui.label(format!("Players: {}/{}", room.peers.len(), room.max_players));
+                
+                ui.separator();
+                ui.label("👥 Players in Room:");
+                
+                for peer in room.peers.values() {
+                    ui.horizontal(|ui| {
+                        let status_icon = match peer.status {
+                            crate::room::PeerStatus::Online => "🟢",
+                            crate::room::PeerStatus::Offline => "🔴",
+                            crate::room::PeerStatus::Connecting => "🟡",
+                        };
+                        ui.label(format!("{} {} ({})", status_icon, peer.alias, peer.virtual_ip));
+                    });
+                }
+            }
+        }
+        
+        ui.separator();
+        
+        if ui.button("🔌 Connect to Network").clicked() {
+            self.state.log("🌐 Initiating P2P connections...".into());
+            // TODO: Implement P2P connections between all peers
+        }
+        
+        if ui.button("📤 Leave Room").clicked() {
+            self.state.log("👋 Leaving room...".into());
+            self.ui.current_screen = AppScreen::MainMenu;
+        }
+    }
+
+    fn render_legacy_mode(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Legacy Direct P2P Mode");
+        ui.label("Connect directly to another PC (old style)");
+        
+        ui.separator();
+        
+        ui.horizontal(|ui| {
+            ui.label("Peer IP:");
+            ui.text_edit_singleline(&mut self.ui.peer_ip);
+        });
+        
+        ui.horizontal(|ui| {
+            ui.label("Port:");
+            ui.text_edit_singleline(&mut self.ui.peer_port);
+        });
+        
+        ui.separator();
+        
+        ui.horizontal(|ui| {
+            if ui.button("🔗 Connect").clicked() {
+                if self.ui.peer_ip.is_empty() {
+                    self.state.log("❌ Peer IP cannot be empty".into());
+                } else {
+                    self.initiate_legacy_connection();
+                }
+            }
+            
+            if ui.button("↩️ Back").clicked() {
+                self.ui.current_screen = AppScreen::MainMenu;
+            }
+        });
+    }
+
+    fn initiate_legacy_connection(&self) {
+        let peer_ip = self.ui.peer_ip.clone();
         let peer_port = self.ui.peer_port.clone();
         let state = self.state.clone();
 
-        self.state.log(format!("🔌 Conectando a {}:{}", peer_ip, peer_port));
+        self.state.log(format!("🔌 Connecting to {}:{}", peer_ip, peer_port));
 
         tokio::spawn(async move {
             let peer_addr: String = format!("{}:{}", peer_ip, peer_port);
@@ -177,25 +305,25 @@ impl EguiApp {
                                 .await
                             {
                                 Ok(node) => {
-                                    state.log("✅ NetworkNode creado".into());
+                                    state.log("✅ NetworkNode created".into());
                                     let shutdown = state.shutdown.clone();
                                     state.shutdown.store(false, Ordering::Relaxed);
                                     if let Err(e) = node.run(shutdown).await {
-                                        state.log(format!("❌ Error de conexión: {}", e));
+                                        state.log(format!("❌ Connection error: {}", e));
                                     }
                                 }
                                 Err(e) => {
-                                    state.log(format!("❌ Error al crear NetworkNode: {}", e));
+                                    state.log(format!("❌ NetworkNode error: {}", e));
                                 }
                             }
                         }
                         Err(e) => {
-                            state.log(format!("❌ Dirección de bind inválida: {}", e));
+                            state.log(format!("❌ Invalid bind address: {}", e));
                         }
                     }
                 }
                 Err(e) => {
-                    state.log(format!("❌ Dirección del peer inválida: {}", e));
+                    state.log(format!("❌ Invalid peer address: {}", e));
                 }
             }
         });
@@ -207,55 +335,27 @@ impl App for EguiApp {
         self.ensure_textures_loaded(ctx);
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            if self.state.connected.load(Ordering::Relaxed) {
-                ui.colored_label(egui::Color32::GREEN, "● Connected");
-            } else {
-                ui.colored_label(egui::Color32::RED, "● Disconnected");
-            }
+            self.render_header(ui);
 
-            let icon = if self.state.connected.load(Ordering::Relaxed) {
-                self.power_on_texture.as_ref().unwrap()
-            } else {
-                self.power_off_texture.as_ref().unwrap()
-            };
-
-            if ui
-                .add(egui::ImageButton::new(icon).rounding(8.0).frame(true))
-                .clicked()
-            {
-                self.toggle_connection();
-            }
-
-            // ===================== HEADER =====================
-            ui.heading("Mini LAN Bridge");
-
-            // ===================== CONTEXT INFO =====================
-            ui.horizontal(|ui| {
-                ui.label("My IP:");
-                ui.label(&self.state.my_ip);
-            });
-
-            // ===================== DATA FORM =====================
-            ui.horizontal(|ui| {
-                ui.label("Peer IP:");
-                ui.text_edit_singleline(&mut self.ui.peer_ip);
-
-                ui.label("Port:");
-                ui.text_edit_singleline(&mut self.ui.peer_port);
-            });       
-
-            if ui.button("Exit").clicked() {
-                std::process::exit(0);
+            // Render appropriate screen
+            match self.ui.current_screen {
+                AppScreen::MainMenu => self.render_main_menu(ui),
+                AppScreen::CreateRoom => self.render_create_room(ui),
+                AppScreen::JoinRoom => self.render_join_room(ui),
+                AppScreen::InRoom => self.render_in_room(ui),
+                AppScreen::Legacy => self.render_legacy_mode(ui),
             }
 
             // ===================== LOGS =====================
             ui.separator();
-            ui.label("Logs:");
-            eframe::egui::ScrollArea::vertical().show(ui, |ui| {
-                for log in self.state.logs.lock().unwrap().iter() {
-                    ui.label(log);
-                }
-            });
+            ui.label("📋 Activity Log:");
+            egui::ScrollArea::vertical()
+                .auto_shrink([false; 2])
+                .show(ui, |ui| {
+                    for log in self.state.logs.lock().unwrap().iter() {
+                        ui.label(log);
+                    }
+                });
         });
     }
 }

@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::net::UdpSocket;
+use crate::room::Room;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -19,6 +20,10 @@ pub struct AppState {
     pub logs: Arc<Mutex<Vec<String>>>,
     /// Shared UDP socket for P2P communication
     pub shared_socket: Arc<Mutex<Option<Arc<UdpSocket>>>>,
+    /// Currently active room (None if not in a room)
+    pub current_room: Arc<Mutex<Option<Room>>>,
+    /// Current player ID/alias
+    pub player_id: String,
 }
 
 impl AppState {
@@ -26,8 +31,8 @@ impl AppState {
     /// 
     /// # Arguments
     /// * `my_ip` - Local machine IP address
-    /// * `_peer_port` - Reserved for future use (currently unused)
-    pub fn new(my_ip: String, _peer_port: String) -> Self {
+    /// * `player_id` - Player identifier/alias
+    pub fn new(my_ip: String, player_id: String) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -35,11 +40,13 @@ impl AppState {
             
         Self {
             my_ip: my_ip.trim().to_string(),
+            player_id,
             connected: Arc::new(AtomicBool::new(false)),
             shutdown: Arc::new(AtomicBool::new(false)),
             logs: Arc::new(Mutex::new(Vec::new())),
             last_seen: AtomicU64::new(now),
             shared_socket: Arc::new(Mutex::new(None)),
+            current_room: Arc::new(Mutex::new(None)),
         }
     }
 

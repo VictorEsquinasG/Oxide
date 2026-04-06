@@ -5,11 +5,13 @@ mod packet;
 mod tray;
 mod ui;
 mod system;
+mod room;
+mod room_manager;
 
 use egui::IconData;
 use local_ip_address::local_ip;
 use std::sync::Arc;
-use ui::egui_ui::{EguiApp, UiState};
+use ui::egui_ui::EguiApp;
 
 fn load_icon() -> IconData {
     let (icon_rgba, icon_width, icon_height) = {
@@ -39,7 +41,7 @@ fn load_icon() -> IconData {
 async fn main() -> eframe::Result<()> {
     let my_ip = local_ip().unwrap_or_else(|_| "0.0.0.0".parse().unwrap());
     // ===================== GLOBAL STATE =====================
-    let state = Arc::new(app::AppState::new(my_ip.to_string(), "9000".to_string()));
+    let state = Arc::new(app::AppState::new(my_ip.to_string(), "Player".to_string()));
 
     // ===================== SYSTEM INFO ====================
     // VPN LAN Emulation - Direct P2P tunnel via UDP
@@ -49,21 +51,9 @@ async fn main() -> eframe::Result<()> {
 
     // ===================== SYSTEM TRAY =====================
     let _tray = tray::node::spawn_tray(state.clone());
-    // ===================== UI STATE =====================
-    let ui_state = UiState {
-        peer_ip: String::new(),
-        peer_port: "9000".to_string(),
-    };
-
+    
     // ===================== GUI APP =====================
-    let app = EguiApp {
-        state: state.clone(),
-        ui: ui_state,
-        power_on_texture: None,
-        power_off_texture: None,
-        wintun_install_attempted: false,
-        npcap_install_attempted: false,
-    };
+    let app = EguiApp::new(state.clone());
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
