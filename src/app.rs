@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::net::UdpSocket;
 use crate::room::Room;
+use crate::network::P2PNetwork;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -24,6 +25,8 @@ pub struct AppState {
     pub current_room: Arc<Mutex<Option<Room>>>,
     /// Current player ID/alias
     pub player_id: String,
+    /// P2P mesh network manager (None if not active)
+    pub p2p_network: Arc<Mutex<Option<P2PNetwork>>>,
 }
 
 impl AppState {
@@ -47,6 +50,7 @@ impl AppState {
             last_seen: AtomicU64::new(now),
             shared_socket: Arc::new(Mutex::new(None)),
             current_room: Arc::new(Mutex::new(None)),
+            p2p_network: Arc::new(Mutex::new(None)),
         }
     }
 
