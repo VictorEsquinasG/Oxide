@@ -4,10 +4,8 @@
 
 
 ### What is it? 
-* It is NOT a full VPN replacement.
-* Only provides access to a private network from any part of the world
+* A open VPN service to create distance-LAN parties
 
 ### Designed for 
 * LAN gaming over the internet.
-* Sharing Files with anyone.
-* Access to remote Desktops.
+* Access to remote Networks.
