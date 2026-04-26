@@ -7,7 +7,7 @@
 ```
 PASO A PASO:
 
-1. Abres HecateVPN
+1. Abres Oxide
    → Ves pantalla principal con 3 botones
 
 2. Haces click en "➕ Crear a Room"
@@ -47,7 +47,7 @@ COMPARTIR CON FAMILIA:
 ```
 PASO A PASO:
 
-1. Tu hijo abre HecateVPN en su PC
+1. Tu hijo abre Oxide en su PC
    → Ves pantalla principal
 
 2. Hace click en "➕ Join a Room"
@@ -125,7 +125,7 @@ y compartir conexión de red virtual
 
 ## Ejemplo 4: Archivo JSON generado (guardado automático)
 
-**Ubicación:** `C:\Users\[usuario]\AppData\Roaming\HecateVPN\rooms.json`
+**Ubicación:** `C:\Users\[usuario]\AppData\Roaming\Oxide\rooms.json`
 
 ```json
 {
@@ -264,7 +264,7 @@ PC 1 - PAPÁ (Host)
   IP: 203.0.113.50
   SO: Windows
   
-  Abre HecateVPN → Crear Sala
+  Abre Oxide → Crear Sala
   Nombre: "Diablo Party"
   Alias: "Papá"
   Max Players: 4
@@ -278,7 +278,7 @@ PC 2 - HIJO (Madrid)
   IP: 198.51.100.42
   SO: Windows
   
-  Abre HecateVPN → Unirse a Sala
+  Abre Oxide → Unirse a Sala
   Código: "Epic-Demon-2027"
   Alias: "Hijo1"
   
@@ -291,7 +291,7 @@ PC 3 - HIJA (Barcelona)
   IP: 192.0.2.88
   SO: Linux
   
-  Abre HecateVPN → Unirse a Sala
+  Abre Oxide → Unirse a Sala
   Código: "Epic-Demon-2027"
   Alias: "Hija"
   
@@ -304,7 +304,7 @@ PC 4 - SOBRINO (Valencia)
   IP: 192.0.2.200
   SO: macOS
   
-  Abre HecateVPN → Unirse a Sala
+  Abre Oxide → Unirse a Sala
   Código: "Epic-Demon-2027"
   Alias: "Sobrino"
   
@@ -387,16 +387,16 @@ Sistema verifica: self.ui.room_name.is_empty()
 TIMELINE - Noche de juegos en familia:
 
 18:00 - CREACIÓN
-Papá abre HecateVPN
+Papá abre Oxide
 → Crea sala "Noche de Viernes"
 → Código: "Swift-Kraken-2027"
 → rooms.json creado/actualizado
 
 18:05 - PRIMERAS CONEXIONES
-Hijo abre HecateVPN
+Hijo abre Oxide
 → Se une con código
 → Ahora: 2 personas
-Hija abre HecateVPN
+Hija abre Oxide
 → Se une con código
 → Ahora: 3 personas
 
@@ -426,7 +426,7 @@ Hija sale
 → rooms.json: active = false
 
 23:00 - REINICIO SEMANA SIGUIENTE
-Papá vuelve a abrir HecateVPN
+Papá vuelve a abrir Oxide
 → Carga rooms.json
 → Ve sala anterior
 → Click [Unirse]

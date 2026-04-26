@@ -181,8 +181,8 @@ If you still see "❌ Not in a room!" error:
    - If missing, RoomManager failed to start
 
 2. **Check JSON files:**
-   - Windows: `C:\Users\<user>\.hecatevpn\rooms\`
-   - Linux: `~/.hecatevpn/rooms/`
+   - Windows: `C:\Users\<user>\.Oxide\rooms\`
+   - Linux: `~/.Oxide/rooms/`
    - Room should have a JSON file named after the room code
 
 3. **Verify room_code matches exactly:**

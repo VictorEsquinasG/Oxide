@@ -104,7 +104,7 @@ impl EguiApp {
     }
 
     fn render_header(&self, ui: &mut egui::Ui) {
-        ui.heading("🎮 HecateVPN - Family LAN Gaming");
+        ui.heading("🎮 Oxide - Online LAN Party");
         
         ui.horizontal(|ui| {
             if self.state.connected.load(Ordering::Relaxed) {
@@ -119,7 +119,7 @@ impl EguiApp {
     }
 
     fn render_main_menu(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Welcome to HecateVPN!");
+        ui.heading("Welcome to Oxide!");
         ui.label("🎮 Play LAN games with your family remotely");
         
         ui.separator();

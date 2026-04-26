@@ -1,8 +1,8 @@
 # Testing Multi-Instance Rooms (Windows + Linux)
 
 ## Setup Requirements
-- **Machine 1**: Windows (Padre - has HecateVPN compiled and running)
-- **Machine 2**: Linux (Hijo - has HecateVPN compiled and running)
+- **Machine 1**: Windows (Padre - has Oxide compiled and running)
+- **Machine 2**: Linux (Hijo - has Oxide compiled and running)
 - Both on same network (can ping each other)
 - Both machines actually RUNNING at the same time
 
@@ -12,7 +12,7 @@
 
 ### Step 1: On Windows (Padre)
 ```
-1. Open HecateVPN on Windows
+1. Open Oxide on Windows
 2. Click "➕ Create a Room"
 3. Fill in:
    - Room Name: "TestGame"
@@ -33,7 +33,7 @@ EXPECTED RESULT:
 
 ### Step 2: On Linux (Hijo) 
 ```
-1. Open HecateVPN on Linux
+1. Open Oxide on Linux
 2. Click "➕ Join a Room"
 3. Fill in:
    - Room Code: ALPHA-FOX-2024 (paste from above)
@@ -121,14 +121,14 @@ EXPECTED RESULT:
 
 Windows - Open File Explorer:
 ```
-%APPDATA%\HecateVPN\rooms.json
-(Usually: C:\Users\c-017\AppData\Roaming\HecateVPN\rooms.json)
+%APPDATA%\Oxide\rooms.json
+(Usually: C:\Users\c-017\AppData\Roaming\Oxide\rooms.json)
 ```
 
 Linux - Open Terminal:
 ```bash
-ls -la ~/.config/HecateVPN/rooms.json
-cat ~/.config/HecateVPN/rooms.json
+ls -la ~/.config/Oxide/rooms.json
+cat ~/.config/Oxide/rooms.json
 ```
 
 Should see JSON with rooms array containing your room.
@@ -140,7 +140,7 @@ Should see JSON with rooms array containing your room.
 **This WON'T Work:**
 ```
 1. Dad creates room on Windows
-2. Dad closes HecateVPN on Windows
+2. Dad closes Oxide on Windows
 3. Son tries to join on Linux
    → ❌ Room not found
    
@@ -176,16 +176,16 @@ WHY: The room info only exists in Windows's local file
 
 ### Windows (MinGW or Visual Studio installed)
 ```bash
-cd C:\Users\c-017\Documents\GitHub\HecateVPN
+cd C:\Users\c-017\Documents\GitHub\Oxide
 cargo build --release
 cargo run --release
 ```
 
 ### Linux
 ```bash
-cd ~/Documents/GitHub/HecateVPN
+cd ~/Documents/GitHub/Oxide
 cargo build --release
-./target/release/HecateVPN
+./target/release/Oxide
 ```
 
 ---

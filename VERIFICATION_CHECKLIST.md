@@ -336,7 +336,7 @@
 **Reviewed by:** GitHub Copilot  
 **Status:** ✅ **APPROVED FOR USE**
 
-Your HecateVPN multi-player room system is:
+Your Oxide multi-player room system is:
 - ✅ Fully implemented
 - ✅ Well-documented
 - ✅ Thoroughly tested

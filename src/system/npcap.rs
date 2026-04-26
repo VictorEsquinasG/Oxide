@@ -18,7 +18,7 @@ fn get_marker_path() -> PathBuf {
     let app_data = std::env::var("APPDATA")
         .unwrap_or_else(|_| std::env::var("LOCALAPPDATA").unwrap_or_default());
     
-    let hecate_dir = PathBuf::from(app_data).join("HecateVPN");
+    let hecate_dir = PathBuf::from(app_data).join("Oxide");
     let _ = std::fs::create_dir_all(&hecate_dir);
     
     hecate_dir.join(NPCAP_MARKER_FILE)
@@ -170,7 +170,7 @@ pub async fn install_npcap(on_progress: Option<Arc<Mutex<Box<dyn Fn(String) + Se
     progress("✅ INSTALLATION SUCCESSFUL!".to_string());
     progress("🎉 Npcap SDK is ready to use".to_string());
     progress("".to_string()); // blank line
-    progress("👉 Please restart HecateVPN to complete the installation".to_string());
+    progress("👉 Please restart Oxide to complete the installation".to_string());
     progress("".to_string()); // blank line
     
     // Create marker file

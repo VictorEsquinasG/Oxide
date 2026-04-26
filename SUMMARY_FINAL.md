@@ -14,7 +14,7 @@
 ### Fase 1 & 2: Sistema Completo de Salas Multi-Jugador
 
 ```
-📦 HecateVPN V2.0 (Preparación para Multi-Player)
+📦 Oxide V2.0 (Preparación para Multi-Player)
 ├── ✅ Gestión de Salas (create, join, leave)
 ├── ✅ Persistencia en JSON (rooms.json)
 ├── ✅ UI de 5 Pantallas
@@ -157,9 +157,9 @@ serde_json = "1.0"  # Para persistencia JSON
 ## 📁 Persistencia (JSON)
 
 **Ubicación por SO:**
-- 🪟 Windows: `%APPDATA%\HecateVPN\rooms.json`
-- 🍎 macOS: `~/Library/Application Support/HecateVPN/rooms.json`
-- 🐧 Linux: `~/.config/HecateVPN/rooms.json`
+- 🪟 Windows: `%APPDATA%\Oxide\rooms.json`
+- 🍎 macOS: `~/Library/Application Support/Oxide/rooms.json`
+- 🐧 Linux: `~/.config/Oxide/rooms.json`
 
 **Características:**
 - ✅ Auto-guardado después de cada operación
@@ -173,7 +173,7 @@ serde_json = "1.0"  # Para persistencia JSON
 
 ### Como HOST (Creador):
 ```
-1. Abrir HecateVPN
+1. Abrir Oxide
 2. Click "Crear Sala"
 3. Completar: Nombre, Alias, Max Jugadores
 4. ✅ Sistema genera código (ej: "Phantom-Knight-2027")
@@ -183,7 +183,7 @@ serde_json = "1.0"  # Para persistencia JSON
 
 ### Como GUEST (Jugador):
 ```
-1. Abrir HecateVPN
+1. Abrir Oxide
 2. Click "Unirse a Sala"
 3. Ingresar código + alias
 4. ✅ Conectado a sala
@@ -371,7 +371,7 @@ Con esta sólida base lista, Phase 3 implementará:
 
 1. **Compilar y ejecutar:**
    ```bash
-   cd HecateVPN
+   cd Oxide
    cargo run --release
    ```
 

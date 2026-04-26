@@ -10,7 +10,7 @@ This document provides step-by-step instructions for testing the newly implement
 
 ### 1. Compilation Check
 ```bash
-cd c:\Users\c-017\Documents\GitHub\HecateVPN
+cd c:\Users\c-017\Documents\GitHub\Oxide
 cargo check
 # Expected: Finished with 0 errors
 ```
@@ -38,26 +38,26 @@ cargo check
 
 **Machine A (Windows 11)**:
 ```bash
-# Open PowerShell in HecateVPN directory
-cd c:\Users\c-017\Documents\GitHub\HecateVPN
+# Open PowerShell in Oxide directory
+cd c:\Users\c-017\Documents\GitHub\Oxide
 
 # Build debug version (faster)
 cargo build
 
 # Find the executable
-# Location: target/debug/HecateVPN.exe
+# Location: target/debug/Oxide.exe
 ```
 
 **Machine B (Linux Mint)**:
 ```bash
-# Open terminal in HecateVPN directory
-cd /path/to/HecateVPN
+# Open terminal in Oxide directory
+cd /path/to/Oxide
 
 # Build debug version
 cargo build
 
 # Find the executable
-# Location: target/debug/HecateVPN
+# Location: target/debug/Oxide
 ```
 
 ---
@@ -82,10 +82,10 @@ ping <windows-machine-ip>
 ### Step 3: Start Application on Machine A (Windows)
 
 ```
-1. Run: target/debug/HecateVPN.exe
+1. Run: target/debug/Oxide.exe
 
 2. You should see:
-   ✅ "🎮 HecateVPN - LAN Emulation for Legacy Games"
+   ✅ "🎮 Oxide - LAN Emulation for Legacy Games"
    ✅ "📡 Arquitectura: TUN Virtual Interface + UDP P2P"
    ✅ "✅ Sistema listo para conectar"
 
@@ -123,7 +123,7 @@ ping <windows-machine-ip>
 ### Step 5: Join Room on Machine B (Linux)
 
 ```
-1. Run: target/debug/HecateVPN
+1. Run: target/debug/Oxide
 
 2. Click "🎯 Join Room"
 
@@ -226,7 +226,7 @@ sudo kill -9 <PID>
 **Solution**:
 ```bash
 # Windows - Allow firewall rule
-netsh advfirewall firewall add rule name="HecateVPN UDP" `
+netsh advfirewall firewall add rule name="Oxide UDP" `
   dir=in action=allow protocol=udp localport=9000
 
 # Linux - UFW

@@ -2,7 +2,7 @@
 # Ejecutar como: powershell -ExecutionPolicy Bypass -File install-npcap.ps1
 
 Write-Host "================================================" -ForegroundColor Cyan
-Write-Host "      Instalador de Npcap para HecateVPN" -ForegroundColor Cyan
+Write-Host "      Instalador de Npcap para Oxide" -ForegroundColor Cyan
 Write-Host "================================================" -ForegroundColor Cyan
 Write-Host ""
 

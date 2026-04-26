@@ -1,6 +1,6 @@
 #!/bin/bash
-# HecateVPN Installation and Setup Script
-# Helps set up HecateVPN for Linux systems
+# Oxide Installation and Setup Script
+# Helps set up Oxide for Linux systems
 
 set -e
 
@@ -12,7 +12,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}HecateVPN - Setup Script${NC}"
+echo -e "${BLUE}Oxide - Setup Script${NC}"
 echo -e "${BLUE}========================================${NC}\n"
 
 # Check if running on Linux
@@ -63,16 +63,16 @@ fi
 
 echo -e "${GREEN}✅ TUN device is accessible${NC}\n"
 
-# Find and run HecateVPN
-echo -e "${BLUE}Looking for HecateVPN binary...${NC}"
+# Find and run Oxide
+echo -e "${BLUE}Looking for Oxide binary...${NC}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BINARY_PATHS=(
-    "$SCRIPT_DIR/target/release/HecateVPN"
-    "$SCRIPT_DIR/target/debug/HecateVPN"
-    "./target/release/HecateVPN"
-    "./target/debug/HecateVPN"
-    "$(which HecateVPN 2>/dev/null || echo '')"
+    "$SCRIPT_DIR/target/release/Oxide"
+    "$SCRIPT_DIR/target/debug/Oxide"
+    "./target/release/Oxide"
+    "./target/debug/Oxide"
+    "$(which Oxide 2>/dev/null || echo '')"
 )
 
 BINARY=""
@@ -84,7 +84,7 @@ for path in "${BINARY_PATHS[@]}"; do
 done
 
 if [ -z "$BINARY" ]; then
-    echo -e "${RED}❌ HecateVPN binary not found${NC}"
+    echo -e "${RED}❌ Oxide binary not found${NC}"
     echo -e "${BLUE}Building from source...${NC}"
     
     if ! command -v cargo &> /dev/null; then
@@ -95,14 +95,14 @@ if [ -z "$BINARY" ]; then
     
     cd "$SCRIPT_DIR"
     cargo build --release
-    BINARY="$SCRIPT_DIR/target/release/HecateVPN"
+    BINARY="$SCRIPT_DIR/target/release/Oxide"
 fi
 
-echo -e "${GREEN}✅ Found HecateVPN: $BINARY${NC}\n"
+echo -e "${GREEN}✅ Found Oxide: $BINARY${NC}\n"
 
-# Run HecateVPN
+# Run Oxide
 echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}Starting HecateVPN...${NC}"
+echo -e "${GREEN}Starting Oxide...${NC}"
 echo -e "${GREEN}========================================${NC}\n"
 
 "$BINARY"

@@ -149,7 +149,7 @@
 
 ### Source Code
 ```
-HecateVPN/src/network/
+Oxide/src/network/
   ├── p2p_network.rs (388 lines) ✅
   ├── peer_connection.rs (387 lines) ✅
   ├── nat_traversal.rs (300+ lines) ✅
@@ -159,14 +159,14 @@ HecateVPN/src/network/
   ├── packet_handler.rs (existing)
   └── vpn_tunnel.rs (existing)
 
-HecateVPN/src/
+Oxide/src/
   ├── app.rs (modified) ✅
   └── ui/egui_ui.rs (modified) ✅
 ```
 
 ### Documentation
 ```
-HecateVPN/
+Oxide/
   ├── FINAL_REPORT_PHASE_3.md ✅
   ├── PHASE_3_SUMMARY.md ✅
   ├── PHASE_3_COMPLETE.md ✅

@@ -82,9 +82,9 @@
 **Archivo:** `rooms.json`
 
 **Ubicación por SO:**
-- 🪟 Windows: `%APPDATA%\HecateVPN\rooms.json`
-- 🍎 macOS: `~/Library/Application Support/HecateVPN/rooms.json`
-- 🐧 Linux: `~/.config/HecateVPN/rooms.json`
+- 🪟 Windows: `%APPDATA%\Oxide\rooms.json`
+- 🍎 macOS: `~/Library/Application Support/Oxide/rooms.json`
+- 🐧 Linux: `~/.config/Oxide/rooms.json`
 
 **Formato JSON:**
 ```json
@@ -165,7 +165,7 @@ manager.delete_room("Alpha-Fox-2025").await?;
 
 ### Paso 1: El Host crea la sala
 ```
-Papá abre HecateVPN
+Papá abre Oxide
   → Click "Crear Sala"
   → Nombre: "Noche de Juegos"
   → Alias: "Papá"
@@ -179,7 +179,7 @@ Sistema genera:
 
 ### Paso 2: Los Guests se unen
 ```
-Hijo abre HecateVPN
+Hijo abre Oxide
   → Click "Unirse a Sala"
   → Código: "Phantom-Knight-2027"
   → Alias: "Hijo"
@@ -189,7 +189,7 @@ Recibe IP virtual: 10.0.0.2
 ```
 
 ```
-Hija abre HecateVPN
+Hija abre Oxide
   → Click "Unirse a Sala"
   → Código: "Phantom-Knight-2027"
   → Alias: "Hija"
@@ -276,7 +276,7 @@ y verlo funcionar sobre la red virtual
 
 ```powershell
 # 1. Entrar a carpeta
-cd c:\Users\c-017\Documents\GitHub\HecateVPN
+cd c:\Users\c-017\Documents\GitHub\Oxide
 
 # 2. Compilar
 cargo build --release

@@ -44,7 +44,7 @@
 
 ```
 📦 RoomManager {
-    config_path: PathBuf          // ~/.config/HecateVPN/rooms.json
+    config_path: PathBuf          // ~/.config/Oxide/rooms.json
     config: RoomConfig
     
     // Métodos principales:
@@ -60,9 +60,9 @@
 }
 
 Directorio guardado:
-  Windows:  C:\Users\[user]\AppData\Roaming\HecateVPN\rooms.json
-  macOS:    ~/Library/Application Support/HecateVPN/rooms.json
-  Linux:    ~/.config/HecateVPN/rooms.json
+  Windows:  C:\Users\[user]\AppData\Roaming\Oxide\rooms.json
+  macOS:    ~/Library/Application Support/Oxide/rooms.json
+  Linux:    ~/.config/Oxide/rooms.json
 ```
 
 ---
@@ -184,10 +184,10 @@ let app = EguiApp::new(state.clone());
 ```
 PANTALLA 1: Main Menu
 ┌──────────────────────────────────────────────┐
-│ 🎮 HecateVPN - Family LAN Gaming            │
+│ 🎮 Oxide - Family LAN Gaming            │
 │ ● Connected   |   Local IP: 192.168.1.100    │
 │                                              │
-│              Welcome to HecateVPN!           │
+│              Welcome to Oxide!           │
 │       🎮 Play LAN games with your family    │
 │                                              │
 │         ┌──────────────────────────┐         │
@@ -200,7 +200,7 @@ PANTALLA 1: Main Menu
 
 PANTALLA 2: Create Room
 ┌──────────────────────────────────────────────┐
-│ 🎮 HecateVPN - Family LAN Gaming            │
+│ 🎮 Oxide - Family LAN Gaming            │
 │ ● Connected   |   Local IP: 192.168.1.100    │
 │                                              │
 │         Create a New Room                    │
@@ -217,7 +217,7 @@ PANTALLA 2: Create Room
 
 PANTALLA 3: Join Room
 ┌──────────────────────────────────────────────┐
-│ 🎮 HecateVPN - Family LAN Gaming            │
+│ 🎮 Oxide - Family LAN Gaming            │
 │ ● Connected   |   Local IP: 192.168.1.100    │
 │                                              │
 │         Join a Room                          │
@@ -235,7 +235,7 @@ PANTALLA 3: Join Room
 
 PANTALLA 4: In Room
 ┌──────────────────────────────────────────────┐
-│ 🎮 HecateVPN - Family LAN Gaming            │
+│ 🎮 Oxide - Family LAN Gaming            │
 │ ● Connected   |   Local IP: 192.168.1.100    │
 │                                              │
 │ 🏠 Room: Family Gaming Night                │
@@ -351,7 +351,7 @@ Para ver navegación:            → src/ui/egui_ui.rs (método update, línea 3
 
 ### Como HOST (creador de sala):
 ```
-1. Abrir HecateVPN
+1. Abrir Oxide
 2. Click "Crear Sala"
 3. Nombre: "Noche de Juegos"
 4. Tu alias: "Papá"
@@ -364,7 +364,7 @@ Para ver navegación:            → src/ui/egui_ui.rs (método update, línea 3
 
 ### Como GUEST (jugador):
 ```
-1. Abrir HecateVPN
+1. Abrir Oxide
 2. Click "Unirse a Sala"
 3. Código: "Phantom-Knight-2027"
 4. Tu alias: "Hijo"
@@ -404,16 +404,16 @@ Con esta base sólida, Phase 3 implementará:
 ## 🚀 Para compilar y probar
 
 ```bash
-# En terminal, desde carpeta HecateVPN:
+# En terminal, desde carpeta Oxide:
 cargo build --release
 
 # Ejecutar:
-./target/release/HecateVPN.exe  # Windows
-./target/release/HecateVPN      # Linux/Mac
+./target/release/Oxide.exe  # Windows
+./target/release/Oxide      # Linux/Mac
 
 # Ver qué se guardó:
-# Windows:  %APPDATA%\HecateVPN\rooms.json
-# Linux:    ~/.config/HecateVPN/rooms.json
+# Windows:  %APPDATA%\Oxide\rooms.json
+# Linux:    ~/.config/Oxide/rooms.json
 ```
 
 ---

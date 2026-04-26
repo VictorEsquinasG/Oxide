@@ -2,7 +2,7 @@
 
 ## 📋 Resumen de lo que se implementó
 
-Hemos transformado tu **HecateVPN** de una aplicación P2P de **1-a-1** en un sistema completo de **salas multi-jugador** perfectamente diseñado para que tu familia pueda conectarse remotamente y jugar juegos LAN antiguos juntos.
+Hemos transformado tu **Oxide** de una aplicación P2P de **1-a-1** en un sistema completo de **salas multi-jugador** perfectamente diseñado para que tu familia pueda conectarse remotamente y jugar juegos LAN antiguos juntos.
 
 ---
 
@@ -51,9 +51,9 @@ RoomManager {
 }
 
 // Ubicación de guardado:
-Windows:  %APPDATA%\HecateVPN\rooms.json
-macOS:    ~/Library/Application Support/HecateVPN/rooms.json
-Linux:    ~/.config/HecateVPN/rooms.json
+Windows:  %APPDATA%\Oxide\rooms.json
+macOS:    ~/Library/Application Support/Oxide/rooms.json
+Linux:    ~/.config/Oxide/rooms.json
 ```
 
 ---
@@ -73,10 +73,10 @@ Linux:    ~/.config/HecateVPN/rooms.json
 
 ### Pantalla 1: **MENÚ PRINCIPAL**
 ```
-🎮 HecateVPN - Family LAN Gaming
+🎮 Oxide - Family LAN Gaming
 ● Conectado | Local IP: 192.168.1.100
 
-Welcome to HecateVPN!
+Welcome to Oxide!
 🎮 Play LAN games with your family
 
 ┌──────────────────┐
@@ -194,7 +194,7 @@ Ejemplo real de cómo se ve:
 
 ### PASO 1: Papá crea la sala
 ```
-1. Abre HecateVPN
+1. Abre Oxide
 2. Click "Create a Room"
 3. Nombre: "Noche de Juegos Retro"
 4. Alias: "Papá"
@@ -205,7 +205,7 @@ Ejemplo real de cómo se ve:
 
 ### PASO 2: Hijo se une
 ```
-1. Abre HecateVPN
+1. Abre Oxide
 2. Click "Join a Room"
 3. Código: "Phantom-Knight-2027"
 4. Alias: "Hijo"
@@ -214,7 +214,7 @@ Ejemplo real de cómo se ve:
 
 ### PASO 3: Hija se une
 ```
-1. Abre HecateVPN
+1. Abre Oxide
 2. Click "Join a Room"
 3. Código: "Phantom-Knight-2027"
 4. Alias: "Hija"
@@ -279,7 +279,7 @@ Accede a cualquiera para entender cómo funciona.
 
 ```bash
 # 1. Entrar a carpeta
-cd HecateVPN
+cd Oxide
 
 # 2. Compilar
 cargo build --release
@@ -356,13 +356,13 @@ Patrón: [Adjetivo]-[Sustantivo]-[Año]
 Ubicación automática según SO:
 
 Windows:
-C:\Users\[usuario]\AppData\Roaming\HecateVPN\rooms.json
+C:\Users\[usuario]\AppData\Roaming\Oxide\rooms.json
 
 macOS:
-/Users/[usuario]/Library/Application Support/HecateVPN/rooms.json
+/Users/[usuario]/Library/Application Support/Oxide/rooms.json
 
 Linux:
-/home/[usuario]/.config/HecateVPN/rooms.json
+/home/[usuario]/.config/Oxide/rooms.json
 
 Se actualiza automáticamente con cada acción
 ```
@@ -395,7 +395,7 @@ Se actualiza automáticamente con cada acción
 
 ## 🎉 ¡LISTO PARA USAR!
 
-Tu HecateVPN ahora es:
+Tu Oxide ahora es:
 
 ✅ **Funcional** - Compila y ejecuta sin errores  
 ✅ **Completo** - Sistema de salas implementado  

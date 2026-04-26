@@ -1,4 +1,4 @@
-# 🎮 HecateVPN - Guía de Uso Completa
+# 🎮 Oxide - Guía de Uso Completa
 
 Felicidades! Ya tienes una **VPN LAN completamente funcional** lista para jugar videojuegos retro en red.
 
@@ -64,7 +64,7 @@ Una aplicación **plug-and-play** que crea una interfaz de red virtual entre dos
 **Opción 1: Script automático (más fácil)**
 
 ```bash
-cd /home/mint/HecateVPN
+cd /home/mint/Oxide
 sudo ./install.sh
 ```
 
@@ -72,20 +72,20 @@ El script automáticamente:
 - Verifica que tengas /dev/net/tun
 - Instala dependencias si faltan
 - Compila si es necesario
-- Inicia HecateVPN con privilegios correctos
+- Inicia Oxide con privilegios correctos
 
 **Opción 2: Manual**
 
 ```bash
-cd /home/mint/HecateVPN
-sudo ./target/release/HecateVPN
+cd /home/mint/Oxide
+sudo ./target/release/Oxide
 ```
 
 ### Pasos para jugar entre dos máquinas
 
 1. **En MÁQUINA A (servidor):**
    ```bash
-   sudo ./target/release/HecateVPN
+   sudo ./target/release/Oxide
    ```
    - La aplicación se abrirá
    - Verás tu IP local en la sección "My IP"
@@ -93,7 +93,7 @@ sudo ./target/release/HecateVPN
 
 2. **En MÁQUINA B (cliente):**
    ```bash
-   sudo ./target/release/HecateVPN
+   sudo ./target/release/Oxide
    ```
    - La aplicación se abrirá
    - En el campo "Peer IP" ingresa la IP de MÁQUINA A
@@ -117,7 +117,7 @@ sudo ./target/release/HecateVPN
 
 ```bash
 # Solución: ejecuta con sudo
-sudo ./target/release/HecateVPN
+sudo ./target/release/Oxide
 ```
 
 ### Error: "/dev/net/tun not found"
@@ -129,7 +129,7 @@ sudo mknod /dev/net/tun c 10 200
 sudo chmod 0666 /dev/net/tun
 
 # Luego intenta de nuevo
-sudo ./target/release/HecateVPN
+sudo ./target/release/Oxide
 ```
 
 ### El juego no ve la red virtual
@@ -150,7 +150,7 @@ ip addr show hecate0
 # 1. Verifica que puedas hacer ping entre máquinas (red normal)
 ping <IP-MAQUINA-B>
 
-# 2. Revisa los logs de HecateVPN para ver el estado
+# 2. Revisa los logs de Oxide para ver el estado
 # En la sección "Logs" de la aplicación
 
 # 3. Si ves "NAT detected!", es normal - significa que tu NAT está funcionando
@@ -253,8 +253,8 @@ src/
 ### Para jugar YA:
 
 1. Compila con `cargo build --release`
-2. En máquina A: `sudo ./target/release/HecateVPN`
-3. En máquina B: `sudo ./target/release/HecateVPN`
+2. En máquina A: `sudo ./target/release/Oxide`
+3. En máquina B: `sudo ./target/release/Oxide`
 4. Conecta máquina B a máquina A
 5. ¡Abre tu juego favorito!
 

@@ -145,7 +145,7 @@ RESUMEN_FINAL_ESPAÑOL.md       (Español)
 ## 🗂️ ESTRUCTURA DE CARPETAS
 
 ```
-HecateVPN/
+Oxide/
 ├── src/
 │   ├── room.rs                      ← NUEVO
 │   ├── room_manager.rs              ← NUEVO
@@ -276,4 +276,4 @@ HecateVPN/
 **Última actualización:** Abril 6, 2026  
 **Estado:** ✅ **COMPLETO Y VERIFICADO**
 
-¡Bienvenido a HecateVPN V2 - Multi-Player Edition! 🎮
+¡Bienvenido a Oxide V2 - Multi-Player Edition! 🎮

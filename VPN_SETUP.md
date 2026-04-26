@@ -1,4 +1,4 @@
-# HecateVPN - LAN Emulation over Internet
+# Oxide - LAN Emulation over Internet
 
 A lightweight, cross-platform VPN designed to emulate LAN connectivity for legacy games and applications that require local network play.
 
@@ -19,14 +19,14 @@ A lightweight, cross-platform VPN designed to emulate LAN connectivity for legac
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/HecateVPN
-cd HecateVPN
+git clone https://github.com/yourusername/Oxide
+cd Oxide
 
 # Build release binary (requires Rust)
 cargo build --release
 
 # Run with sudo (required for TUN device creation)
-sudo ./target/release/HecateVPN
+sudo ./target/release/Oxide
 ```
 
 **Requirements:**
@@ -38,7 +38,7 @@ sudo ./target/release/HecateVPN
 
 ```bash
 cargo build --release
-.\target\release\HecateVPN.exe
+.\target\release\Oxide.exe
 ```
 
 **Requirements:**
@@ -49,7 +49,7 @@ cargo build --release
 
 ```bash
 cargo build --release
-./target/release/HecateVPN
+./target/release/Oxide
 ```
 
 **Requirements:**
@@ -57,9 +57,9 @@ cargo build --release
 
 ## Usage
 
-1. **Start HecateVPN on both machines:**
+1. **Start Oxide on both machines:**
    ```bash
-   sudo ./target/release/HecateVPN
+   sudo ./target/release/Oxide
    ```
 
 2. **One machine acts as the server** (opens the listening port)
@@ -127,7 +127,7 @@ cargo build --release
 **Error: "TUN device creation requires root privileges"**
 ```bash
 # Run with sudo
-sudo ./target/release/HecateVPN
+sudo ./target/release/Oxide
 ```
 
 **Interface not appearing**
@@ -160,7 +160,7 @@ ip route | grep hecate0
 
 **Permission denied**
 - macOS may require additional privileges
-- Try running from Terminal with: `sudo ./target/release/HecateVPN`
+- Try running from Terminal with: `sudo ./target/release/Oxide`
 
 ## Development
 

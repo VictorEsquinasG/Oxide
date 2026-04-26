@@ -1,10 +1,10 @@
-# HecateVPN - Phase 1 & 2 Implementation Complete ✅
+# Oxide - Phase 1 & 2 Implementation Complete ✅
 
 ## 🎉 What's New in This Update
 
 ### Multi-Player Room System for Family Gaming
 
-Your HecateVPN now supports **multiple players** connecting to the same virtual LAN simultaneously, with a complete room management system!
+Your Oxide now supports **multiple players** connecting to the same virtual LAN simultaneously, with a complete room management system!
 
 ---
 
@@ -105,9 +105,9 @@ Auto-generated memorable codes:
 **File:** `rooms.json`
 
 **Locations:**
-- 🪟 Windows: `%APPDATA%\HecateVPN\rooms.json`
-- 🍎 macOS: `~/Library/Application Support/HecateVPN/rooms.json`
-- 🐧 Linux: `~/.config/HecateVPN/rooms.json`
+- 🪟 Windows: `%APPDATA%\Oxide\rooms.json`
+- 🍎 macOS: `~/Library/Application Support/Oxide/rooms.json`
+- 🐧 Linux: `~/.config/Oxide/rooms.json`
 
 ---
 
@@ -115,7 +115,7 @@ Auto-generated memorable codes:
 
 ### Host (Room Creator):
 ```
-1. Open HecateVPN
+1. Open Oxide
 2. Click "Create a Room"
 3. Enter: Room name, Your alias, Max players
 4. System generates code: "Alpha-Fox-2025"
@@ -125,7 +125,7 @@ Auto-generated memorable codes:
 
 ### Guest (Player):
 ```
-1. Open HecateVPN
+1. Open Oxide
 2. Click "Join a Room"
 3. Enter: Room code, Your alias
 4. Click "Join"
@@ -244,9 +244,9 @@ Estimated time: 1-2 weeks of focused development
 
 ## 📖 Original README
 
-This update builds on the existing HecateVPN concept:
+This update builds on the existing Oxide concept:
 
-> HecateVPN is a lightweight P2P VPN for family LAN gaming over the internet. No central servers, no port forwarding needed, just simple room codes and local data.
+> Oxide is a lightweight P2P VPN for family LAN gaming over the internet. No central servers, no port forwarding needed, just simple room codes and local data.
 
 ---
 
@@ -286,8 +286,8 @@ When Phase 3 is complete:
 cargo build --release
 
 # Run
-./target/release/HecateVPN  # Linux/macOS
-HecateVPN.exe               # Windows (if built)
+./target/release/Oxide  # Linux/macOS
+Oxide.exe               # Windows (if built)
 
 # Or directly
 cargo run --release
@@ -303,7 +303,7 @@ Expected first run:
 ## 🔍 File Structure
 
 ```
-HecateVPN/
+Oxide/
 ├── src/
 │   ├── main.rs                 [UPDATED]
 │   ├── app.rs                  [UPDATED]

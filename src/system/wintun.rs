@@ -19,7 +19,7 @@ fn get_marker_path() -> PathBuf {
     let app_data = std::env::var("APPDATA")
         .unwrap_or_else(|_| std::env::var("LOCALAPPDATA").unwrap_or_default());
     
-    let hecate_dir = PathBuf::from(app_data).join("HecateVPN");
+    let hecate_dir = PathBuf::from(app_data).join("Oxide");
     let _ = std::fs::create_dir_all(&hecate_dir);
     
     hecate_dir.join(WINTUN_MARKER_FILE)
@@ -187,7 +187,7 @@ pub async fn install_wintun(on_progress: Option<Arc<Mutex<Box<dyn Fn(String) + S
     progress("✅ INSTALLATION SUCCESSFUL!".to_string());
     progress("🎉 Wintun is ready to use".to_string());
     progress("".to_string()); // blank line
-    progress("👉 Please close this window and restart HecateVPN".to_string());
+    progress("👉 Please close this window and restart Oxide".to_string());
     progress("".to_string()); // blank line
     
     // Create marker file to prevent reinstallation

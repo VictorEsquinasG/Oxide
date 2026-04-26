@@ -1,4 +1,4 @@
-# HecateVPN - Fase 1 & 2: Implementation Summary
+# Oxide - Fase 1 & 2: Implementation Summary
 
 ## ✅ Completed: Core Room System & UI Framework
 
@@ -37,9 +37,9 @@
 
 **Key Features:**
 - Cross-platform config directory support:
-  - Windows: `%APPDATA%/HecateVPN/`
-  - macOS: `~/Library/Application Support/HecateVPN/`
-  - Linux: `~/.config/HecateVPN/`
+  - Windows: `%APPDATA%/Oxide/`
+  - macOS: `~/Library/Application Support/Oxide/`
+  - Linux: `~/.config/Oxide/`
   
 - **Core Methods:**
   - `create_room()`: Create new room with creator as first peer
@@ -135,7 +135,7 @@ serde_json = "1.0"  # For room configuration JSON serialization
 
 ```
 ┌─────────────────────────────────────────────────┐
-│              HecateVPN Main App                 │
+│              Oxide Main App                 │
 └─────────────────────────────────────────────────┘
            │
            ├─→ AppState
@@ -173,7 +173,7 @@ serde_json = "1.0"  # For room configuration JSON serialization
 ## 🎮 How Users Will Use It
 
 ### Creating a Room (Host):
-1. Open HecateVPN
+1. Open Oxide
 2. Click "➕ Create a Room"
 3. Enter room name: "Family Gaming Night"
 4. Enter your alias: "Dad"
@@ -183,7 +183,7 @@ serde_json = "1.0"  # For room configuration JSON serialization
 8. Share this code with family
 
 ### Joining a Room (Guest):
-1. Open HecateVPN
+1. Open Oxide
 2. Click "➕ Join a Room"
 3. Enter room code: "Phantom-Knight-2027"
 4. Enter your alias: "Son"
@@ -287,12 +287,12 @@ Cargo.toml                  [UPDATED - serde_json]
 ## 🚀 Build & Run
 
 ```bash
-cd HecateVPN
+cd Oxide
 cargo build --release
 
 # Run
-./target/release/HecateVPN.exe  # Windows
-./target/release/HecateVPN      # Linux/macOS
+./target/release/Oxide.exe  # Windows
+./target/release/Oxide      # Linux/macOS
 ```
 
 **Expected First Run:**

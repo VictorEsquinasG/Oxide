@@ -12,7 +12,7 @@
 - RoomManager loaded the config file ONCE at startup
 - When User B joined, the RoomManager didn't reload the file
 - So it never saw the room created by User A
-- Each OS has separate storage (`%APPDATA%\HecateVPN` vs `~/.config/HecateVPN`)
+- Each OS has separate storage (`%APPDATA%\Oxide` vs `~/.config/Oxide`)
 
 **Solution Applied:**
 - Added `reload()` method to RoomManager
@@ -60,8 +60,8 @@ ui.horizontal(|ui| {
 ## ⚠️ Remaining Issue: OS-Specific Storage
 
 **The Core Problem:**
-- Windows stores rooms in: `C:\Users\<user>\AppData\Roaming\HecateVPN\rooms.json`
-- Linux stores rooms in: `~/.config/HecateVPN/rooms.json`
+- Windows stores rooms in: `C:\Users\<user>\AppData\Roaming\Oxide\rooms.json`
+- Linux stores rooms in: `~/.config/Oxide/rooms.json`
 - **These are different files on different machines!**
 
 This means:
@@ -118,17 +118,17 @@ This is a LIMITATION of local file storage, not a bug
 
 ### Windows
 ```
-C:\Users\c-017\AppData\Roaming\HecateVPN\rooms.json
+C:\Users\c-017\AppData\Roaming\Oxide\rooms.json
 ```
 
 ### Linux  
 ```
-~/.config/HecateVPN/rooms.json
+~/.config/Oxide/rooms.json
 ```
 
 ### macOS
 ```
-~/Library/Application Support/HecateVPN/rooms.json
+~/Library/Application Support/Oxide/rooms.json
 ```
 
 ---
@@ -202,8 +202,8 @@ When room joining fails:
 - [ ] Check room code is typed **exactly** as shown (case-sensitive)
 - [ ] Check both use same network (for real IP exchange)
 - [ ] Verify rooms.json exists:
-  - Windows: `%APPDATA%\HecateVPN\rooms.json`
-  - Linux: `~/.config/HecateVPN/rooms.json`
+  - Windows: `%APPDATA%\Oxide\rooms.json`
+  - Linux: `~/.config/Oxide/rooms.json`
 - [ ] Check room appears in creator's logs with 🔐 icon
 - [ ] If still fails, share logs from BOTH machines
 

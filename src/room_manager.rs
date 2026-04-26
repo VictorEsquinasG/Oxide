@@ -15,7 +15,7 @@ pub struct RoomManager {
 
 impl RoomManager {
     /// Create a new RoomManager with default config path
-    /// Path: ~/.hecatevpn/rooms.json
+    /// Path: ~/.Oxide/rooms.json
     pub async fn new(default_alias: String) -> Result<Self, String> {
         let config_dir = Self::get_config_dir()?;
         
@@ -42,21 +42,21 @@ impl RoomManager {
         {
             let app_data = std::env::var("APPDATA")
                 .map_err(|_| "Failed to get APPDATA".to_string())?;
-            Ok(PathBuf::from(app_data).join("HecateVPN"))
+            Ok(PathBuf::from(app_data).join("Oxide"))
         }
 
         #[cfg(target_os = "macos")]
         {
             let home = std::env::var("HOME")
                 .map_err(|_| "Failed to get HOME".to_string())?;
-            Ok(PathBuf::from(home).join("Library/Application Support/HecateVPN"))
+            Ok(PathBuf::from(home).join("Library/Application Support/Oxide"))
         }
 
         #[cfg(target_os = "linux")]
         {
             let home = std::env::var("HOME")
                 .map_err(|_| "Failed to get HOME".to_string())?;
-            Ok(PathBuf::from(home).join(".config/HecateVPN"))
+            Ok(PathBuf::from(home).join(".config/Oxide"))
         }
     }
 

@@ -1,6 +1,6 @@
 # 🎉 PHASE 3: P2P MESH NETWORKING - FINAL REPORT
 
-## Project: HecateVPN - LAN Emulation for Remote Gaming
+## Project: Oxide - LAN Emulation for Remote Gaming
 
 **Date**: Today's Session  
 **Status**: ✅ **87.5% COMPLETE** (7 of 8 tasks)  
@@ -11,7 +11,7 @@
 
 ## 📋 Executive Summary
 
-This session successfully implemented the entire P2P mesh networking layer for HecateVPN, enabling true peer-to-peer communication between gaming machines without a central server.
+This session successfully implemented the entire P2P mesh networking layer for Oxide, enabling true peer-to-peer communication between gaming machines without a central server.
 
 ### What Was Accomplished:
 - ✅ Created 4 major networking modules (1,400+ lines of code)

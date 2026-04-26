@@ -260,12 +260,12 @@ Packets flow between peers via UDP mesh
 
 ### Test Procedure:
 1. **Machine A (Windows 11)**
-   - Start HecateVPN
+   - Start Oxide
    - Create room "TestMesh"
    - Wait for logs confirming startup
 
 2. **Machine B (Linux Mint)**
-   - Start HecateVPN
+   - Start Oxide
    - Join room "TestMesh"
    - Observe logs for peer discovery
 
@@ -298,7 +298,7 @@ netstat -ano | findstr :9000
 netstat -tlunp | grep 9000
 
 # Check firewall (Windows)
-netsh advfirewall firewall show rule name="HecateVPN"
+netsh advfirewall firewall show rule name="Oxide"
 
 # Check firewall (Linux)
 sudo ufw status
@@ -440,4 +440,4 @@ sudo ufw status
 
 **Last Updated**: Phase 3 Development Session
 **Status**: 🟡 IN PROGRESS - Ready for Testing Phase
-**Branch**: main (HecateVPN)
+**Branch**: main (Oxide)

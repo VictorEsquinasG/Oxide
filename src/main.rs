@@ -45,7 +45,7 @@ async fn main() -> eframe::Result<()> {
 
     // ===================== SYSTEM INFO ====================
     // VPN LAN Emulation - Direct P2P tunnel via UDP
-    state.log("🎮 HecateVPN - LAN Emulation for Legacy Games".into());
+    state.log("🎮 Oxide - LAN Emulation for Legacy Games".into());
     state.log("📡 Arquitectura: TUN Virtual Interface + UDP P2P".into());
     state.log("✅ Sistema listo para conectar".into());
 
@@ -71,7 +71,7 @@ async fn main() -> eframe::Result<()> {
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("HecateVPN")
+            .with_title("Oxide")
             .with_icon(load_icon()),
         ..Default::default()
     };

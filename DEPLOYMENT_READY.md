@@ -29,8 +29,8 @@ Your logs were accumulating endlessly.
 ## Ready to Test
 
 ### Test Setup
-1. **Windows machine (Padre)** - HecateVPN running
-2. **Linux machine (Hijo)** - HecateVPN running
+1. **Windows machine (Padre)** - Oxide running
+2. **Linux machine (Hijo)** - Oxide running
 3. Both on same network (same WiFi/LAN)
 
 ### Test Scenario
@@ -93,9 +93,9 @@ Step 4 - Either:
 
 ### File Locations
 ```
-Windows:  C:\Users\<user>\AppData\Roaming\HecateVPN\rooms.json
-Linux:    ~/.config/HecateVPN/rooms.json
-macOS:    ~/Library/Application Support/HecateVPN/rooms.json
+Windows:  C:\Users\<user>\AppData\Roaming\Oxide\rooms.json
+Linux:    ~/.config/Oxide/rooms.json
+macOS:    ~/Library/Application Support/Oxide/rooms.json
 ```
 
 ### Compilation Status
@@ -129,8 +129,8 @@ If you run both Dad and Son on same Windows:
 ## Deployment Steps
 
 ### Before Testing
-1. Close all HecateVPN instances
-2. Delete old binary if it's locked: `target/release/HecateVPN.exe`
+1. Close all Oxide instances
+2. Delete old binary if it's locked: `target/release/Oxide.exe`
 3. Rebuild:
    ```bash
    cargo build --release
@@ -139,12 +139,12 @@ If you run both Dad and Son on same Windows:
 ### Run Test
 **Windows:**
 ```bash
-.\target\release\HecateVPN.exe
+.\target\release\Oxide.exe
 ```
 
 **Linux:**
 ```bash
-./target/release/HecateVPN
+./target/release/Oxide
 ```
 
 ---
@@ -154,7 +154,7 @@ If you run both Dad and Son on same Windows:
 ### Still Getting "Room not found"?
 
 1. **Both machines actually running?**
-   - [ ] Confirm HecateVPN window visible on both
+   - [ ] Confirm Oxide window visible on both
 
 2. **Room code correct?**
    - [ ] Copy exactly from logs (case-sensitive!)
@@ -169,8 +169,8 @@ If you run both Dad and Son on same Windows:
    - [ ] If present, there's a file permission issue
 
 5. **File exists?**
-   - Windows: `%APPDATA%\HecateVPN\rooms.json`
-   - Linux: `~/.config/HecateVPN/rooms.json`
+   - Windows: `%APPDATA%\Oxide\rooms.json`
+   - Linux: `~/.config/Oxide/rooms.json`
 
 ---
 

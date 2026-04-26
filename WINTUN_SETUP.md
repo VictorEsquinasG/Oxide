@@ -1,8 +1,8 @@
-# Guía de Instalación de Wintun para HecateVPN
+# Guía de Instalación de Wintun para Oxide
 
 ## Descripción General
 
-HecateVPN utiliza **Wintun**, un driver de red en espacio de usuario para Windows, para crear adaptadores de red virtuales. Este documento explica la configuración y la solución de problemas.
+Oxide utiliza **Wintun**, un driver de red en espacio de usuario para Windows, para crear adaptadores de red virtuales. Este documento explica la configuración y la solución de problemas.
 
 ## ¿Qué es Wintun?
 
@@ -10,14 +10,14 @@ Wintun es un driver de red de código abierto y libre para Windows que permite a
 
 ## Instalación Automática (Recomendado)
 
-HecateVPN incluye detección e instalación automática de Wintun:
+Oxide incluye detección e instalación automática de Wintun:
 
 ### Primera ejecución:
 1. Al iniciar la app, se verifica automáticamente si Wintun está instalado
 2. Si **no** está instalado, aparecerá un diálogo cuando intentes conectarte
 3. Acepta la instalación y la app descargará e instalará Wintun 0.14.1 automáticamente
 4. **Verás en los logs el progreso de instalación** (descarga, instalación, etc.)
-5. Una vez completada, aparecerá un mensaje pidiendo que **reinicies HecateVPN**
+5. Una vez completada, aparecerá un mensaje pidiendo que **reinicies Oxide**
 6. Al reiniciar, Wintun estará disponible y podrás conectarte
 
 ### Comportamiento de instalación:
@@ -36,7 +36,7 @@ Si la instalación automática falla, puedes instalar Wintun manualmente:
 1. Descarga desde: https://www.wintun.net/
 2. Ejecuta el instalador: `wintun-0.14.1-amd64.msi`
 3. Sigue el asistente de instalación
-4. Reinicia HecateVPN
+4. Reinicia Oxide
 
 ### Opción 2: Instalación por Línea de Comandos (PowerShell como Administrador)
 
@@ -65,7 +65,7 @@ Significa que `wintun.dll` no se encuentra. Soluciones:
 2. **Reinstalar Wintun**:
    - Panel de Control → Programas → Programas y características → Busca "Wintun" y desinstala
    - Reinicia tu computadora
-   - Usa el instalador automático de HecateVPN o instala manualmente
+   - Usa el instalador automático de Oxide o instala manualmente
 
 3. **Verificar versión de Windows**:
    - Wintun requiere Windows 7 SP1 o superior
@@ -75,7 +75,7 @@ Significa que `wintun.dll` no se encuentra. Soluciones:
 
 **La app debe ejecutarse como Administrador para instalar Wintun:**
 
-1. Haz clic derecho en `HecateVPN.exe`
+1. Haz clic derecho en `Oxide.exe`
 2. Selecciona "Ejecutar como administrador"
 3. Intenta instalar nuevamente
 
@@ -86,7 +86,7 @@ Si aún falla:
 
 ### Wintun está instalado pero la app no lo detecta
 
-1. Reinicia completamente HecateVPN
+1. Reinicia completamente Oxide
 2. Verifica que `wintun.dll` esté en el lugar correcto:
    ```powershell
    Get-ChildItem -Path "C:\Windows\System32" -Filter "wintun.dll"
@@ -107,7 +107,7 @@ Si aún falla:
 - ✅ Descargado (X bytes)
 - 📋 Ejecutando instalador MSI...
 - ⚠️ Reintentando con permisos elevados (si es necesario)
-- ✅ Instalación completada. Por favor reinicia HecateVPN.
+- ✅ Instalación completada. Por favor reinicia Oxide.
 
 ✅ **Mejor Manejo de Errores**
 - Si falla la primera vez, reintentar automáticamente con permisos elevados
@@ -139,7 +139,7 @@ Si aún falla:
 - La instalación de Wintun requiere permisos de administrador
 - El MSI se descarga del sitio web oficial de Wintun
 - Ningún tráfico de red es modificado por Wintun; solo proporciona la interfaz del adaptador
-- HecateVPN controla todo el tráfico que fluye a través del adaptador virtual
+- Oxide controla todo el tráfico que fluye a través del adaptador virtual
 
 ## Soporte
 
@@ -149,4 +149,4 @@ Si encuentras problemas:
 2. Verifica manualmente la instalación de Wintun
 3. Intenta reinstalar Wintun
 4. Reinicia Windows si es necesario
-5. Contacta con soporte de HecateVPN con mensajes de error y versión de Windows
+5. Contacta con soporte de Oxide con mensajes de error y versión de Windows
