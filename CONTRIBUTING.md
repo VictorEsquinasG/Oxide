@@ -1,6 +1,6 @@
-# 🤝 Contributing to HecateVPN
+# 🤝 Contributing to the open VPN project
 
-First off, thank you for considering contributing to HecateVPN! 🚀
+First off, thank you for considering contributing to this VPN! 🚀
 
 This project aims to revive LAN multiplayer gaming for classic titles over the internet. To achieve this, we need to maintain a robust, secure, and cross-platform codebase.
 
@@ -18,7 +18,7 @@ The architecture is strictly modular. We must maintain a clean separation of con
 * **Do not break this isolation.** If you need to pass data, use channels or the shared `Arc<Mutex<AppState>>`.
 
 ### 2. 🖥️ 100% Cross-Platform Stability
-HecateVPN must run on **Windows** and **Linux** simultaneously.
+This VPN must run on **Windows** and **Linux** simultaneously.
 * **Do not introduce OS-specific breaking changes.**
 * If you implement a feature that relies on a specific OS syscall (especially regarding the `tun` interface), you **must** use conditional compilation (`#[cfg(target_os = "linux")]`, etc.) and provide a fallback or a "no-op" for the other system.
 * The code must compile and run on both platforms at all times.
@@ -46,7 +46,7 @@ We are currently looking for contributors to help with:
 1.  Fork the repository.
 2.  Clone your fork:
     ```bash
-    git clone [https://github.com/YOUR_USERNAME/HecateVPN.git](https://github.com/YOUR_USERNAME/HecateVPN.git)
+    git clone [https://github.com/YOUR_USERNAME/Oxide.git](https://github.com/YOUR_USERNAME/Oxide.git)
     ```
 3.  Ensure you have the necessary system dependencies (packet compilers on Linux, TAP drivers on Windows).
 
