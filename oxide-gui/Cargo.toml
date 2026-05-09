@@ -1,0 +1,28 @@
+[package]
+name = "oxide-gui"
+version = "0.1.0"
+edition = "2021"
+
+# Metadata for portable builds
+[package.metadata.portable]
+binaries = ["oxide-gui", "oxide-service"]
+assets = ["Icon.png"]
+
+[dependencies]
+oxide-core = { path = "../oxide-core" }
+tokio = { version = "1.36", features = ["full"] }
+# Primary: wgpu (modern, cross-platform, Vulkan/DX12/Metal abstraction)
+# Fallback: glow (legacy OpenGL support if needed)
+eframe = { version = "0.26", features = ["wgpu", "glow"] }
+egui = "0.26"
+image = "0.24"
+tray-icon = "0.11"
+winit = "0.29"
+rfd = "0.14"
+local-ip-address = "0.5"
+lazy_static = "1.4"
+raw-window-handle = "0.6"
+
+[[bin]]
+name = "oxide-gui"
+path = "src/main.rs"

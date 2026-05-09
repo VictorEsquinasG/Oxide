@@ -1,34 +1,9 @@
-[package]
-name = "Oxide"
-version = "0.1.0"
-edition = "2021"
-
-[features]
-default = []
-# Enable Npcap linking if SDK is installed (only link if SDK available)
-npcap-link = []
-# Include pnet for packet handling (optional - only enabled if Npcap available)
-pnet = ["dep:pnet", "dep:pnet_packet"]
-
-[dependencies]
-tokio = { version = "1.36", features = ["full"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"           # for room configuration serialization
-bincode = "1.3"
-rand = "0.8"
-anyhow = "1.0"
-local-ip-address = "0.5"     # for IP automatic detection
-eframe = "0.26"              # egui framework for multiplatform GUI 
-egui = "0.26"
-image = "0.24"
-tray-icon = "0.11"
-winit = "0.29"               # eframe uses it internaly but we need it explicit
-libloading = "0.8"
-rfd = "0.14"                 # for system dialogs
-reqwest = { version = "0.11", features = ["stream"] }
-zip = "0.6"
-socket2 = "0.6"              # for socket configuration (SO_REUSEADDR, SO_REUSEPORT)
-libc = "0.2"                 # for raw socket operations on Unix
-tun = "0.6"                  # for TUN device creation on Linux and macOS
-pnet = { version = "0.34", optional = true }  # optional - only link if Npcap SDK available
-pnet_packet = { version = "0.34", optional = true }  # optional - companion to pnet
+[workspace]
+resolver = "2"
+members = [
+    "oxide-core",
+    "oxide-gui",
+    "oxide-cli",
+    "oxide-service",
+    "xtask",
+]
