@@ -147,6 +147,35 @@ cargo run -p oxide-cli -- join <room-id>
 cargo xtask dev-gui / cargo xtask dev-service
 ```
 
+### TUN Device Permissions (Linux Only)
+
+The P2P VPN requires creating a virtual network interface (TUN device). On Linux, this requires **root privileges**.
+
+#### Option 1: Run GUI with sudo (Recommended for Testing)
+```bash
+sudo ./target/release/oxide-gui
+```
+
+#### Option 2: Create TUN device once with sudo, then run GUI normally
+```bash
+# One-time setup: create the TUN interface
+sudo ip link add hecate0 type tun
+sudo ip addr add 10.0.0.1/24 dev hecate0
+sudo ip link set hecate0 up
+
+# Then run normally (without sudo)
+./target/release/oxide-gui
+```
+
+#### Option 3: Grant capabilities (Advanced, Linux only)
+```bash
+# Grant CAP_NET_ADMIN to the binary (allows TUN device creation without full sudo)
+sudo setcap cap_net_admin=ep ./target/release/oxide-gui
+./target/release/oxide-gui
+```
+
+**Note**: On Windows and macOS, TUN device creation is handled differently and does not require special permissions.
+
 ## Usage
 
 ### GUI Commands

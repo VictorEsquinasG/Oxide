@@ -44,6 +44,8 @@ pub struct UiState {
     #[allow(dead_code)]
     pub room_manager: Option<Arc<tokio::sync::Mutex<RoomManager>>>,
     pub mesh_controller: Option<MeshController>,
+    /// Toggle for showing/hiding activity log (hidden by default for end-users)
+    pub show_logs: bool,
 }
 
 pub struct EguiApp {
@@ -72,6 +74,7 @@ impl EguiApp {
                 current_screen: AppScreen::MainMenu,
                 room_manager: None,
                 mesh_controller: Some(MeshController::new(state_clone)),
+                show_logs: false,
             },
             power_on_texture: None,
             power_off_texture: None,
@@ -502,18 +505,41 @@ impl App for EguiApp {
             // ===================== LOGS =====================
             ui.separator();
             ui.horizontal(|ui| {
-                ui.label("📋 Activity Log:");
-                if ui.button("🗑️ Clear").clicked() {
-                    self.state.logs.lock().unwrap().clear();
+                // Toggle button to show/hide logs (hidden by default for end-users)
+                if ui.button(if self.ui.show_logs { "🔽 Hide Details" } else { "🔼 Show Details" }).clicked() {
+                    self.ui.show_logs = !self.ui.show_logs;
+                }
+                
+                if self.ui.show_logs {
+                    // Copy logs to clipboard button
+                    if ui.button("📋 Copy Log").clicked() {
+                        let logs_text = self.state.logs.lock().unwrap().join("\n");
+                        if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                            let _ = clipboard.set_text(logs_text);
+                            self.state.log("✅ Log copied to clipboard!".into());
+                        } else {
+                            self.state.log("❌ Failed to access clipboard".into());
+                        }
+                    }
+                    
+                    // Clear logs button
+                    if ui.button("🗑️ Clear").clicked() {
+                        self.state.logs.lock().unwrap().clear();
+                    }
                 }
             });
-            egui::ScrollArea::vertical()
-                .auto_shrink([false; 2])
-                .show(ui, |ui| {
-                    for log in self.state.logs.lock().unwrap().iter() {
-                        ui.label(log);
-                    }
-                });
+
+            // Only show logs if toggle is enabled
+            if self.ui.show_logs {
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false; 2])
+                    .max_height(150.0)
+                    .show(ui, |ui| {
+                        for log in self.state.logs.lock().unwrap().iter() {
+                            ui.label(log);
+                        }
+                    });
+            }
         });
     }
 }
