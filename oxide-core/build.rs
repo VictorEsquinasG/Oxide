@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 fn main() {
     // Configure Npcap SDK path for linking on Windows only
     #[cfg(target_os = "windows")]
