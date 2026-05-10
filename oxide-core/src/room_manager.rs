@@ -22,7 +22,13 @@ impl RoomManager {
         // Create directory if it doesn't exist
         fs::create_dir_all(&config_dir)
             .await
-            .map_err(|e| format!("Failed to create config dir: {}", e))?;
+            .map_err(|e| format!(
+                "Failed to create config directory '{}': {} \n\
+                Please ensure you have write permissions in your home directory. \n\
+                If permission denied, try: sudo chown -R $(whoami) ~/.config/Oxide",
+                config_dir.display(),
+                e
+            ))?;
 
         let config_path = config_dir.join("rooms.json");
 
@@ -77,7 +83,13 @@ impl RoomManager {
 
         fs::write(&self.config_path, json)
             .await
-            .map_err(|e| format!("Failed to write config file: {}", e))?;
+            .map_err(|e| format!(
+                "Failed to write config file at '{}': {} \n\
+                Make sure the directory exists and has write permissions. \n\
+                Try running: chmod -R u+w ~/.config/Oxide",
+                self.config_path.display(),
+                e
+            ))?;
 
         Ok(())
     }

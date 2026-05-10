@@ -6,6 +6,7 @@ use local_ip_address::local_ip;
 use oxide_core::app::AppState;
 use oxide_core::room_manager::RoomManager;
 use std::sync::Arc;
+use std::thread;
 use ui::egui_ui::EguiApp;
 
 fn load_icon() -> IconData {
@@ -57,12 +58,19 @@ async fn main() -> eframe::Result<()> {
         }
     };
 
-    // ===================== SYSTEM TRAY =====================
-    let _tray = tray::node::spawn_tray(state.clone());
+    // ===================== SYSTEM TRAY (Non-blocking) =====================
+    // Spawn tray in background, silently fail if GTK/system tray unavailable
+    let state_tray = state.clone();
+    thread::spawn(move || {
+        if let Err(e) = tray::node::spawn_tray_safe(state_tray) {
+            // Tray is optional - log but don't panic
+            eprintln!("⚠️ Tray icon unavailable: {}", e);
+        }
+    });
 
     // ===================== GUI APP =====================
-    let mut app = EguiApp::new(state.clone());
-    app.ui.room_manager = room_manager;
+    // Store room_manager in Arc to pass to app_creator closure
+    let room_mgr_arc = room_manager.clone();
 
     let create_native_options = || {
         let mut options = eframe::NativeOptions {
@@ -80,8 +88,10 @@ async fn main() -> eframe::Result<()> {
 
     let app_state = state.clone();
     let app_creator = Box::new(
-        move |cc: &eframe::CreationContext<'_>| -> Box<dyn eframe::App> {
-            Box::new(EguiApp::new(app_state.clone()))
+        move |_cc: &eframe::CreationContext<'_>| -> Box<dyn eframe::App> {
+            let mut app = EguiApp::new(app_state.clone());
+            app.ui.room_manager = room_mgr_arc.clone();
+            Box::new(app)
         },
     );
 

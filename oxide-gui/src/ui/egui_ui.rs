@@ -178,6 +178,8 @@ impl EguiApp {
                     self.state.log("❌ Room name cannot be empty".into());
                 } else if self.ui.player_alias.is_empty() {
                     self.state.log("❌ Player alias cannot be empty".into());
+                } else if self.ui.room_manager.is_none() {
+                    self.state.log("❌ Room Manager not initialized. Try restarting the application.".into());
                 } else {
                     let room_name = self.ui.room_name.clone();
                     let player_alias = self.ui.player_alias.clone();
@@ -195,7 +197,14 @@ impl EguiApp {
                             state.log(format!("⚠️ Warning: Could not reload rooms: {}", e));
                         }
                         match mgr
-                            .create_room(room_name.clone(), player_id.clone(), max_players)
+                            .create_room(
+                                room_name.clone(),
+                                player_id.clone(),
+                                player_alias.clone(),
+                                state.my_ip.clone(),
+                                9000,
+                                max_players,
+                            )
                             .await
                         {
                             Ok(room) => {
@@ -259,6 +268,8 @@ impl EguiApp {
                     self.state.log("❌ Room code cannot be empty".into());
                 } else if self.ui.player_alias.is_empty() {
                     self.state.log("❌ Player alias cannot be empty".into());
+                } else if self.ui.room_manager.is_none() {
+                    self.state.log("❌ Room Manager not initialized. Try restarting the application.".into());
                 } else {
                     let room_code = self.ui.room_code.clone();
                     let player_alias = self.ui.player_alias.clone();

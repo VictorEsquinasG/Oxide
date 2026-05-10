@@ -13,6 +13,8 @@ use tokio::net::UdpSocket;
 /// VPN Tunnel handler - bridges TUN and UDP
 pub struct VpnTunnel {
     tun: TunDevice,
+    /// UDP socket for sending/receiving packets (reserved for Phase 4 networking)
+    #[allow(dead_code)]
     socket: Arc<UdpSocket>,
     state: Arc<AppState>,
     our_mac: [u8; 6],

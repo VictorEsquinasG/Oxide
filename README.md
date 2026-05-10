@@ -133,7 +133,7 @@ cargo run -p oxide-service
 
 #### Terminal 2: Run GUI
 ```bash
-cargo run -p oxide-gui
+   cargo run -p oxide-gui
 # or
 cargo xtask dev-gui
 ```

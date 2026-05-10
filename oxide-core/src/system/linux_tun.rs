@@ -6,8 +6,7 @@
 pub mod linux_tun {
     use super::super::tun_device::TunDeviceImpl;
     use anyhow::{anyhow, Result};
-    use std::io::{Read, Write};
-    use std::os::unix::io::{AsRawFd, RawFd};
+    use std::os::unix::io::RawFd;
     use std::process::Command;
 
     /// Linux TUN device wrapper
@@ -83,22 +82,20 @@ pub mod linux_tun {
                     ifr.ifr_name.as_mut_ptr() as *mut u8,
                     name_bytes.len(),
                 );
-            }
 
-            // Set TUN (not TAP) mode
-            unsafe {
+                // Set TUN (not TAP) mode
                 ifr.ifr_ifru.ifru_flags = (libc::IFF_TUN | libc::IFF_NO_PI) as i16;
-            }
 
-            // IOCTL call to create TUN device
-            let ret = unsafe { libc::ioctl(fd, libc::TUNSETIFF as _, &mut ifr as *mut _) };
+                // IOCTL call to create TUN device
+                let ret = libc::ioctl(fd, libc::TUNSETIFF as _, &mut ifr as *mut _);
 
-            if ret < 0 {
-                unsafe { libc::close(fd) };
-                return Err(anyhow!(
-                    "IOCTL TUNSETIFF failed: {}",
-                    std::io::Error::last_os_error()
-                ));
+                if ret < 0 {
+                    libc::close(fd);
+                    return Err(anyhow!(
+                        "IOCTL TUNSETIFF failed: {}",
+                        std::io::Error::last_os_error()
+                    ));
+                }
             }
 
             Ok(fd)

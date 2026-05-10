@@ -42,8 +42,10 @@ impl TunDevice {
                 INSTANCE = Self::create_platform_device(&ip).ok();
             });
 
-            let instance_ref = unsafe { INSTANCE.as_ref() };
-            match instance_ref {
+            // SAFETY: INIT.call_once ensures INSTANCE is only initialized once, 
+            // and we never create a mutable reference while this shared reference exists
+            #[allow(static_mut_refs)]
+            match INSTANCE.as_ref() {
                 Some(device) => Ok(device.clone()),
                 None => Err(anyhow::anyhow!("Failed to initialize TUN device")),
             }
