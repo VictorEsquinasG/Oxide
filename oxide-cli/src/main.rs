@@ -13,6 +13,10 @@ use tokio::net::TcpStream;
 struct Cli {
     #[command(subcommand)]
     command: Commands,
+
+    /// Address of the Oxide service to use
+    #[arg(short, long, default_value = "127.0.0.1:8080", global = true)]
+    service: String,
 }
 
 #[derive(Subcommand)]
@@ -205,9 +209,10 @@ async fn main() -> anyhow::Result<()> {
         Commands::Status { id } => Command::RoomInfo { id },
     };
 
-    let mut stream = TcpStream::connect("127.0.0.1:8080").await.map_err(|e| {
+    let mut stream = TcpStream::connect(&cli.service).await.map_err(|e| {
         anyhow::anyhow!(
-            "Failed to connect to Oxide service: {}. Make sure oxide-service is running.",
+            "Failed to connect to Oxide service at {}: {}. Make sure oxide-service is running and reachable.",
+            cli.service,
             e
         )
     })?;

@@ -56,8 +56,8 @@ async fn main() -> anyhow::Result<()> {
 
     println!("Oxide Service starting on {}", my_ip);
 
-    let listener = TcpListener::bind("127.0.0.1:8080").await?;
-    println!("Listening on 127.0.0.1:8080");
+    let listener = TcpListener::bind("0.0.0.0:8080").await?;
+    println!("Listening on 0.0.0.0:8080 (accepting remote clients)");
 
     loop {
         let (socket, _) = listener.accept().await?;
