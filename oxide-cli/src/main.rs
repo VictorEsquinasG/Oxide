@@ -291,7 +291,6 @@ async fn main() -> anyhow::Result<()> {
 async fn run_vpn(join: Option<&str>, port: u16, key: Option<&str>) -> anyhow::Result<()> {
     use oxide_core::app::AppState;
     use oxide_core::network::vpn_tunnel;
-    use std::net::ToSocketAddrs;
     use std::sync::atomic::Ordering;
     use std::sync::Arc;
 
@@ -318,16 +317,8 @@ async fn run_vpn(join: Option<&str>, port: u16, key: Option<&str>) -> anyhow::Re
     match join {
         None => vpn_tunnel::run_host(state, port, &key).await,
         Some(host) => {
-            let host = if host.contains(':') {
-                host.to_string()
-            } else {
-                format!("{}:9000", host)
-            };
-            let addr = host
-                .to_socket_addrs()?
-                .find(|a| a.is_ipv4())
-                .ok_or_else(|| anyhow::anyhow!("cannot resolve {}", host))?;
-            oxide_core::vpn_config::save_host(&host);
+            let addr = vpn_tunnel::resolve_host(host).await?;
+            oxide_core::vpn_config::save_host(host);
             vpn_tunnel::run_client(state, addr, &key).await
         }
     }

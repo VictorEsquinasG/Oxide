@@ -471,22 +471,13 @@ impl EguiApp {
             let result = if hub {
                 vpn_tunnel::run_host(state.clone(), 9000, &key).await
             } else {
-                let host = if host_text.contains(':') {
-                    host_text.clone()
-                } else {
-                    format!("{}:9000", host_text)
-                };
-                match tokio::net::lookup_host(&host)
-                    .await
-                    .ok()
-                    .and_then(|mut it| it.find(|a| a.is_ipv4()))
-                {
-                    Some(addr) => {
+                match vpn_tunnel::resolve_host(&host_text).await {
+                    Ok(addr) => {
                         oxide_core::vpn_config::save_host(&host_text);
                         vpn_tunnel::run_client(state.clone(), addr, &key).await
                     }
-                    None => {
-                        state.set_status(format!("❌ No se encuentra el host \"{}\"", host));
+                    Err(e) => {
+                        state.set_status(format!("❌ {}", e));
                         Ok(())
                     }
                 }

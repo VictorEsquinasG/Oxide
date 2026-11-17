@@ -396,6 +396,51 @@ pub async fn request_ip(
     anyhow::bail!("no hay respuesta del host {}", hub)
 }
 
+/// Bind the hub socket on `[::]` accepting both IPv6 and IPv4 clients
+/// (IPv4 clients appear as `::ffff:a.b.c.d`). Falls back to IPv4-only.
+pub fn bind_hub_socket(port: u16) -> Result<UdpSocket> {
+    use socket2::{Domain, Protocol, Socket, Type};
+    use std::net::{IpAddr, Ipv6Addr};
+
+    let dual = (|| -> std::io::Result<UdpSocket> {
+        let s = Socket::new(Domain::IPV6, Type::DGRAM, Some(Protocol::UDP))?;
+        s.set_only_v6(false)?; // Windows defaults to v6-only
+        s.set_nonblocking(true)?;
+        s.bind(&SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), port).into())?;
+        UdpSocket::from_std(s.into())
+    })();
+    match dual {
+        Ok(sock) => Ok(sock),
+        Err(_) => {
+            let std_sock = std::net::UdpSocket::bind(("0.0.0.0", port))?;
+            std_sock.set_nonblocking(true)?;
+            Ok(UdpSocket::from_std(std_sock)?)
+        }
+    }
+}
+
+/// Resolve what the user typed: `1.2.3.4`, `1.2.3.4:9000`, `2a0c::1`,
+/// `[2a0c::1]:9000`, `name`, `name:9000`. Default port 9000.
+pub async fn resolve_host(text: &str) -> Result<SocketAddr> {
+    let text = text.trim();
+    if let Ok(addr) = text.parse::<SocketAddr>() {
+        return Ok(addr);
+    }
+    if let Ok(ip) = text.parse::<std::net::IpAddr>() {
+        return Ok(SocketAddr::new(ip, 9000));
+    }
+    let target = if text.contains(':') {
+        text.to_string()
+    } else {
+        format!("{}:9000", text)
+    };
+    tokio::net::lookup_host(&target)
+        .await
+        .ok()
+        .and_then(|mut it| it.next())
+        .ok_or_else(|| anyhow::anyhow!("no se encuentra el host \"{}\"", text))
+}
+
 /// Run as the hub (host). Blocks until shutdown.
 pub async fn run_host(state: Arc<AppState>, port: u16, key: &str) -> Result<()> {
     state.set_status("⏳ Iniciando host…");
@@ -403,7 +448,8 @@ pub async fn run_host(state: Arc<AppState>, port: u16, key: &str) -> Result<()> 
         let cipher = Arc::new(Cipher::new(key)?);
         let ip = HUB_IP.to_string();
         let tun = tokio::task::spawn_blocking(move || TunDevice::new(&ip)).await??;
-        let socket = Arc::new(UdpSocket::bind(("0.0.0.0", port)).await?);
+        let socket = Arc::new(bind_hub_socket(port)?);
+        state.log(format!("📡 Escuchando en UDP {} (IPv6 + IPv4)", port));
         let mut tunnel = VpnTunnel::new(tun, socket, state.clone(), &HUB_IP.to_string(), cipher)
             .await?
             .set_hub(true);
@@ -423,7 +469,8 @@ pub async fn run_client(state: Arc<AppState>, hub: SocketAddr, key: &str) -> Res
     state.set_status("⏳ Conectando con el host…");
     let res = async {
         let cipher = Arc::new(Cipher::new(key)?);
-        let socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+        let bind_addr = if hub.is_ipv6() { "[::]:0" } else { "0.0.0.0:0" };
+        let socket = Arc::new(UdpSocket::bind(bind_addr).await?);
         let ip = request_ip(&socket, hub, crate::vpn_config::client_id(), &cipher)
             .await
             .map_err(|e| {
