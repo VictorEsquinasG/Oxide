@@ -47,23 +47,17 @@ enum Commands {
         /// Room ID
         id: String,
     },
-    /// Bring the VPN tunnel up (needs root on Linux, Administrator on Windows).
-    ///
-    /// Host (hub):   oxide-cli up --ip 10.0.0.1 --hub
-    /// Friend:       oxide-cli up --ip 10.0.0.2 --connect HOST_PUBLIC_IP:9000
-    Up {
-        /// Your virtual IP, unique per player (10.0.0.1 - 10.0.0.254)
-        #[arg(long)]
-        ip: String,
-        /// Hub address to connect to (host:port). Omit on the hub itself.
-        #[arg(long)]
-        connect: Option<String>,
-        /// Act as the hub: relay traffic between all players
-        #[arg(long)]
-        hub: bool,
-        /// Local UDP port (the hub must forward this port on the router)
+    /// Host the VPN: friends connect to you and get a virtual IP automatically.
+    /// Needs root/Administrator. Forward UDP port (default 9000) on your router.
+    Host {
+        /// UDP port to listen on
         #[arg(long, default_value_t = 9000)]
         port: u16,
+    },
+    /// Connect to a host's VPN. The host assigns your virtual IP. Needs root/Administrator.
+    Connect {
+        /// Host public IP or name, optionally with port (default 9000)
+        host: String,
     },
     /// Show room details and peer status
     Status {
@@ -180,14 +174,10 @@ async fn save_config(config: &CliConfig, path: &PathBuf) -> anyhow::Result<()> {
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    if let Commands::Up {
-        ip,
-        connect,
-        hub,
-        port,
-    } = &cli.command
-    {
-        return run_vpn(ip, connect.as_deref(), *hub, *port).await;
+    match &cli.command {
+        Commands::Host { port } => return run_vpn(None, *port).await,
+        Commands::Connect { host } => return run_vpn(Some(host), 0).await,
+        _ => {}
     }
 
     let (mut cli_config, config_path) = load_or_create_config().await?;
@@ -236,7 +226,7 @@ async fn main() -> anyhow::Result<()> {
             peer_id: cli_config.peer_id.clone(),
         },
         Commands::Status { id } => Command::RoomInfo { id },
-        Commands::Up { .. } => unreachable!("handled above"),
+        Commands::Host { .. } | Commands::Connect { .. } => unreachable!("handled above"),
     };
 
     let mut stream = TcpStream::connect(&cli.service).await.map_err(|e| {
@@ -292,32 +282,15 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn run_vpn(ip: &str, connect: Option<&str>, hub: bool, port: u16) -> anyhow::Result<()> {
+async fn run_vpn(join: Option<&str>, port: u16) -> anyhow::Result<()> {
     use oxide_core::app::AppState;
-    use oxide_core::network::vpn_tunnel::VpnTunnel;
-    use oxide_core::system::tun_device::TunDevice;
+    use oxide_core::network::vpn_tunnel;
     use std::net::ToSocketAddrs;
     use std::sync::atomic::Ordering;
     use std::sync::Arc;
 
-    if !hub && connect.is_none() {
-        anyhow::bail!("use --hub (you host) or --connect HOST:PORT (you join)");
-    }
-    let seeds: Vec<std::net::SocketAddr> = match connect {
-        Some(addr) => vec![addr
-            .to_socket_addrs()?
-            .find(|a| a.is_ipv4())
-            .ok_or_else(|| anyhow::anyhow!("cannot resolve {}", addr))?],
-        None => vec![],
-    };
-
     let state = Arc::new(AppState::new("0.0.0.0".into(), "cli".into()));
     state.echo_stdout.store(true, Ordering::Relaxed);
-    let tun = TunDevice::new(ip)?;
-    let socket = Arc::new(tokio::net::UdpSocket::bind(("0.0.0.0", port)).await?);
-    let mut tunnel = VpnTunnel::with_peers(tun, socket, state.clone(), ip, seeds)
-        .await?
-        .set_hub(hub);
 
     let shutdown = state.shutdown.clone();
     tokio::spawn(async move {
@@ -325,5 +298,20 @@ async fn run_vpn(ip: &str, connect: Option<&str>, hub: bool, port: u16) -> anyho
         shutdown.store(true, Ordering::Relaxed);
     });
 
-    tunnel.run().await
+    match join {
+        None => vpn_tunnel::run_host(state, port).await,
+        Some(host) => {
+            let host = if host.contains(':') {
+                host.to_string()
+            } else {
+                format!("{}:9000", host)
+            };
+            let addr = host
+                .to_socket_addrs()?
+                .find(|a| a.is_ipv4())
+                .ok_or_else(|| anyhow::anyhow!("cannot resolve {}", host))?;
+            oxide_core::vpn_config::save_host(&host);
+            vpn_tunnel::run_client(state, addr).await
+        }
+    }
 }
