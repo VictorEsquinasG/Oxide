@@ -29,6 +29,8 @@ pub struct AppState {
     pub p2p_network: Arc<Mutex<Option<Arc<P2PNetwork>>>>,
     /// Also print log lines to stdout (CLI mode)
     pub echo_stdout: AtomicBool,
+    /// One-line VPN status shown prominently in the UI
+    pub status: Mutex<String>,
 }
 
 impl AppState {
@@ -54,6 +56,7 @@ impl AppState {
             current_room: Arc::new(Mutex::new(None)),
             p2p_network: Arc::new(Mutex::new(None)),
             echo_stdout: AtomicBool::new(false),
+            status: Mutex::new(String::new()),
         }
     }
 
@@ -65,6 +68,27 @@ impl AppState {
             .unwrap()
             .as_secs();
         self.last_seen.store(now, Ordering::Relaxed);
+    }
+
+    /// Set the one-line status (also logged when it changes).
+    pub fn set_status(&self, status: impl Into<String>) {
+        let status = status.into();
+        let changed = {
+            let mut cur = self.status.lock().unwrap();
+            if *cur != status {
+                *cur = status.clone();
+                true
+            } else {
+                false
+            }
+        };
+        if changed {
+            self.log(status);
+        }
+    }
+
+    pub fn get_status(&self) -> String {
+        self.status.lock().unwrap().clone()
     }
 
     /// Add a log message to the internal log buffer

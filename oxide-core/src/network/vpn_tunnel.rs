@@ -28,6 +28,13 @@ pub const VPN_MAGIC: [u8; 3] = [0x4F, 0x58, 0x44];
 pub const VPN_VERSION: u8 = 0x01;
 pub const VPN_TYPE_DATA: u8 = 0x01;
 pub const VPN_TYPE_KEEPALIVE: u8 = 0x02;
+/// Client -> hub: payload = 8-byte client id. Asks for a virtual IP.
+pub const VPN_TYPE_JOIN: u8 = 0x03;
+/// Hub -> client: payload = 4-byte virtual IP (empty if the network is full).
+pub const VPN_TYPE_ASSIGN: u8 = 0x04;
+
+/// The hub's own virtual IP.
+pub const HUB_IP: Ipv4Addr = Ipv4Addr::new(10, 0, 0, 1);
 
 /// Size of the VPN header.
 pub const VPN_HEADER_LEN: usize = 5;
@@ -53,6 +60,15 @@ pub fn keepalive_packet(our_ip: Ipv4Addr) -> [u8; VPN_HEADER_LEN + 4] {
     p[3] = VPN_VERSION;
     p[4] = VPN_TYPE_KEEPALIVE;
     p[5..9].copy_from_slice(&our_ip.octets());
+    p
+}
+
+fn control_packet(kind: u8, payload: &[u8]) -> Vec<u8> {
+    let mut p = Vec::with_capacity(VPN_HEADER_LEN + payload.len());
+    p.extend_from_slice(&VPN_MAGIC);
+    p.push(VPN_VERSION);
+    p.push(kind);
+    p.extend_from_slice(payload);
     p
 }
 
@@ -87,6 +103,10 @@ pub struct VpnTunnel {
     peers: HashMap<SocketAddr, Instant>,
     /// Virtual IP -> peer address, learned from source IPs of received packets
     vip_map: HashMap<Ipv4Addr, SocketAddr>,
+    /// Hub only: client id -> assigned virtual IP
+    leases: HashMap<[u8; 8], Ipv4Addr>,
+    /// Last time we heard from any seed (client liveness)
+    last_heard_seed: Instant,
 }
 
 impl VpnTunnel {
@@ -119,12 +139,17 @@ impl VpnTunnel {
             our_ip: our_ipv4,
             peers: HashMap::new(),
             vip_map: HashMap::new(),
+            leases: HashMap::new(),
+            last_heard_seed: Instant::now(),
         })
     }
 
     /// Enable relaying between peers (use on the machine everyone connects to).
     pub fn set_hub(mut self, hub: bool) -> Self {
         self.hub = hub;
+        if hub {
+            self.leases = crate::vpn_config::load_leases();
+        }
         self
     }
 
@@ -190,6 +215,7 @@ impl VpnTunnel {
                         self.send_keepalives().await;
                     }
                     self.expire_peers(now);
+                    self.update_status(now);
                 }
             }
         }
@@ -206,6 +232,61 @@ impl VpnTunnel {
         for addr in targets {
             let _ = self.socket.send_to(&ka, addr).await;
         }
+    }
+
+    fn update_status(&self, now: Instant) {
+        if self.hub {
+            let n = self.peers.len();
+            self.state.connected.store(true, Ordering::Relaxed);
+            self.state.set_status(match n {
+                0 => "🏠 Hosteando: esperando jugadores".to_string(),
+                1 => "🏠 Hosteando: 1 jugador conectado".to_string(),
+                n => format!("🏠 Hosteando: {} jugadores conectados", n),
+            });
+        } else if now.duration_since(self.last_heard_seed) > Duration::from_secs(15) {
+            self.state.connected.store(false, Ordering::Relaxed);
+            self.state
+                .set_status("⚠️ Sin respuesta del host. Reintentando…");
+        } else {
+            self.state.connected.store(true, Ordering::Relaxed);
+            self.state
+                .set_status(format!("✅ Conectado. Tu IP virtual es {}", self.our_ip));
+        }
+    }
+
+    /// Hub: give `from` a virtual IP (stable per client id).
+    async fn handle_join(&mut self, payload: &[u8], from: SocketAddr) {
+        if payload.len() < 8 {
+            return;
+        }
+        let mut id = [0u8; 8];
+        id.copy_from_slice(&payload[..8]);
+
+        let ip = match self.leases.get(&id) {
+            Some(ip) => Some(*ip),
+            None => {
+                let used: std::collections::HashSet<Ipv4Addr> =
+                    self.leases.values().copied().chain([self.our_ip]).collect();
+                let free = (2u8..=254)
+                    .map(|n| Ipv4Addr::new(10, 0, 0, n))
+                    .find(|ip| !used.contains(ip));
+                if let Some(ip) = free {
+                    self.leases.insert(id, ip);
+                    crate::vpn_config::save_leases(&self.leases);
+                }
+                free
+            }
+        };
+
+        let reply = match ip {
+            Some(ip) => {
+                self.vip_map.insert(ip, from);
+                self.state.log(format!("🎟️ Assigned {} to {}", ip, from));
+                control_packet(VPN_TYPE_ASSIGN, &ip.octets())
+            }
+            None => control_packet(VPN_TYPE_ASSIGN, &[]),
+        };
+        let _ = self.socket.send_to(&reply, from).await;
     }
 
     fn expire_peers(&mut self, now: Instant) {
@@ -249,6 +330,20 @@ impl VpnTunnel {
         let Some((kind, payload)) = parse(datagram) else {
             return;
         };
+
+        if self.seeds.contains(&from) {
+            self.last_heard_seed = Instant::now();
+        }
+        if kind == VPN_TYPE_JOIN {
+            if self.hub {
+                self.peers.insert(from, Instant::now());
+                self.handle_join(payload, from).await;
+            }
+            return;
+        }
+        if kind == VPN_TYPE_ASSIGN {
+            return; // only meaningful during connect, handled in request_ip
+        }
 
         if self.peers.insert(from, Instant::now()).is_none() {
             self.state.log(format!("🤝 Peer connected: {}", from));
@@ -321,6 +416,86 @@ impl VpnTunnel {
         }
     }
 }
+
+/// Ask the hub for a virtual IP. Retries for ~10 s.
+pub async fn request_ip(
+    socket: &UdpSocket,
+    hub: SocketAddr,
+    client_id: [u8; 8],
+) -> Result<Ipv4Addr> {
+    let join = control_packet(VPN_TYPE_JOIN, &client_id);
+    let mut buf = [0u8; 1500];
+    for _ in 0..10 {
+        socket.send_to(&join, hub).await?;
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while let Some(left) = deadline.checked_duration_since(Instant::now()) {
+            match tokio::time::timeout(left, socket.recv_from(&mut buf)).await {
+                Ok(Ok((n, from))) if from == hub => {
+                    if let Some((VPN_TYPE_ASSIGN, p)) = parse(&buf[..n]) {
+                        if p.len() == 4 {
+                            return Ok(Ipv4Addr::new(p[0], p[1], p[2], p[3]));
+                        }
+                        anyhow::bail!("el host está lleno (máx. 253 jugadores)");
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    anyhow::bail!("no hay respuesta del host {}", hub)
+}
+
+/// Run as the hub (host). Blocks until shutdown.
+pub async fn run_host(state: Arc<AppState>, port: u16) -> Result<()> {
+    state.set_status("⏳ Iniciando host…");
+    let res = async {
+        let ip = HUB_IP.to_string();
+        let tun = tokio::task::spawn_blocking(move || TunDevice::new(&ip)).await??;
+        let socket = Arc::new(UdpSocket::bind(("0.0.0.0", port)).await?);
+        let mut tunnel = VpnTunnel::new(tun, socket, state.clone(), &HUB_IP.to_string())
+            .await?
+            .set_hub(true);
+        tunnel.run().await
+    }
+    .await;
+    state.connected.store(false, Ordering::Relaxed);
+    match &res {
+        Ok(_) => state.set_status("Desconectado"),
+        Err(e) => state.set_status(format!("❌ Error al hostear: {}", e)),
+    }
+    res
+}
+
+/// Run as a client: get an IP from the hub, create the adapter, tunnel. Blocks until shutdown.
+pub async fn run_client(state: Arc<AppState>, hub: SocketAddr) -> Result<()> {
+    state.set_status("⏳ Conectando con el host…");
+    let res = async {
+        let socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+        let ip = request_ip(&socket, hub, crate::vpn_config::client_id())
+            .await
+            .map_err(|e| {
+                anyhow::anyhow!("{} (¿IP y puerto correctos? ¿UDP abierto en el host?)", e)
+            })?;
+        state.log(format!("🎟️ El host te asignó {}", ip));
+        let ip_s = ip.to_string();
+        let tun = tokio::task::spawn_blocking(move || TunDevice::new(&ip_s))
+            .await?
+            .map_err(|e| {
+                anyhow::anyhow!("no se pudo crear el adaptador de red ({}). ¿Administrador?", e)
+            })?;
+        let mut tunnel =
+            VpnTunnel::with_peers(tun, socket, state.clone(), &ip.to_string(), vec![hub]).await?;
+        tunnel.run().await
+    }
+    .await;
+    state.connected.store(false, Ordering::Relaxed);
+    match &res {
+        Ok(_) => state.set_status("Desconectado"),
+        Err(e) => state.set_status(format!("❌ {}", e)),
+    }
+    res
+}
+
 
 #[cfg(test)]
 mod tests {
