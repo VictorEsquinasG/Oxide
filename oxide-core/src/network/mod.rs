@@ -4,6 +4,7 @@
 //! This module is platform-independent and only deals with UDP sockets.
 //! It does NOT handle TUN device integration or OS-specific networking.
 
+pub mod crypto;
 pub mod mesh_controller;
 pub mod nat_traversal;
 pub mod node;

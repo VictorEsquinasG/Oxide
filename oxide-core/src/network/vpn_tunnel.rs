@@ -6,6 +6,7 @@
 /// their NAT-mapped address; the hub relays traffic between clients
 /// (unicast by learned virtual IP, broadcast/multicast to everyone).
 use crate::app::AppState;
+use crate::network::crypto::{Cipher, ReplayGuard};
 use crate::network::packet_handler;
 use crate::system::tun_device::TunDevice;
 use anyhow::Result;
@@ -16,16 +17,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::net::UdpSocket;
 
-/// Wire format for VPN packets sent over UDP.
-///
-/// ```text
-/// [0..3]  magic  0x4F 0x58 0x44 ("OXD")
-/// [3]     version (0x01)
-/// [4]     packet type (0x01 = data, 0x02 = keepalive)
-/// [5..]   payload: raw IPv4 packet (data) or empty (keepalive)
-/// ```
-pub const VPN_MAGIC: [u8; 3] = [0x4F, 0x58, 0x44];
-pub const VPN_VERSION: u8 = 0x01;
+/// Packet types (carried in the authenticated header, see `crypto`).
 pub const VPN_TYPE_DATA: u8 = 0x01;
 pub const VPN_TYPE_KEEPALIVE: u8 = 0x02;
 /// Client -> hub: payload = 8-byte client id. Asks for a virtual IP.
@@ -36,58 +28,8 @@ pub const VPN_TYPE_ASSIGN: u8 = 0x04;
 /// The hub's own virtual IP.
 pub const HUB_IP: Ipv4Addr = Ipv4Addr::new(10, 0, 0, 1);
 
-/// Size of the VPN header.
-pub const VPN_HEADER_LEN: usize = 5;
-
 const KEEPALIVE_EVERY: Duration = Duration::from_secs(5);
 const PEER_TIMEOUT: Duration = Duration::from_secs(30);
-
-/// Wrap a raw IPv4 packet into the VPN wire format.
-pub fn encapsulate(ipv4_packet: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(VPN_HEADER_LEN + ipv4_packet.len());
-    out.extend_from_slice(&VPN_MAGIC);
-    out.push(VPN_VERSION);
-    out.push(VPN_TYPE_DATA);
-    out.extend_from_slice(ipv4_packet);
-    out
-}
-
-/// Build a keepalive datagram. Payload = sender's virtual IP (4 bytes), so
-/// the hub can map virtual IP -> address before any data flows.
-pub fn keepalive_packet(our_ip: Ipv4Addr) -> [u8; VPN_HEADER_LEN + 4] {
-    let mut p = [0u8; VPN_HEADER_LEN + 4];
-    p[0..3].copy_from_slice(&VPN_MAGIC);
-    p[3] = VPN_VERSION;
-    p[4] = VPN_TYPE_KEEPALIVE;
-    p[5..9].copy_from_slice(&our_ip.octets());
-    p
-}
-
-fn control_packet(kind: u8, payload: &[u8]) -> Vec<u8> {
-    let mut p = Vec::with_capacity(VPN_HEADER_LEN + payload.len());
-    p.extend_from_slice(&VPN_MAGIC);
-    p.push(VPN_VERSION);
-    p.push(kind);
-    p.extend_from_slice(payload);
-    p
-}
-
-/// Parse the VPN header. Returns (packet type, payload) or None if not a VPN packet.
-pub fn parse(packet: &[u8]) -> Option<(u8, &[u8])> {
-    if packet.len() < VPN_HEADER_LEN || packet[0..3] != VPN_MAGIC || packet[3] != VPN_VERSION {
-        return None;
-    }
-    Some((packet[4], &packet[VPN_HEADER_LEN..]))
-}
-
-/// Try to decapsulate a VPN data packet received over UDP.
-/// Returns the raw IPv4 payload, or None if this is not a VPN data packet.
-pub fn decapsulate(packet: &[u8]) -> Option<&[u8]> {
-    match parse(packet) {
-        Some((VPN_TYPE_DATA, payload)) => Some(payload),
-        _ => None,
-    }
-}
 
 /// VPN Tunnel handler - bridges TUN and UDP
 pub struct VpnTunnel {
@@ -98,6 +40,8 @@ pub struct VpnTunnel {
     /// If true, relay traffic between peers
     hub: bool,
     state: Arc<AppState>,
+    cipher: Arc<Cipher>,
+    replay: ReplayGuard,
     our_ip: Ipv4Addr,
     /// Peers we have heard from -> last time
     peers: HashMap<SocketAddr, Instant>,
@@ -116,8 +60,9 @@ impl VpnTunnel {
         socket: Arc<UdpSocket>,
         state: Arc<AppState>,
         our_ip: &str,
+        cipher: Arc<Cipher>,
     ) -> Result<Self> {
-        Self::with_peers(tun, socket, state, our_ip, Vec::new()).await
+        Self::with_peers(tun, socket, state, our_ip, Vec::new(), cipher).await
     }
 
     /// Create a tunnel that connects to the given seed addresses (the hub).
@@ -127,6 +72,7 @@ impl VpnTunnel {
         state: Arc<AppState>,
         our_ip: &str,
         seeds: Vec<SocketAddr>,
+        cipher: Arc<Cipher>,
     ) -> Result<Self> {
         let our_ipv4 = our_ip.split('/').next().unwrap_or(our_ip).parse::<Ipv4Addr>()?;
         state.log(format!("🌐 VPN Tunnel created: IP={}", our_ipv4));
@@ -136,6 +82,8 @@ impl VpnTunnel {
             seeds,
             hub: false,
             state,
+            cipher,
+            replay: ReplayGuard::new(),
             our_ip: our_ipv4,
             peers: HashMap::new(),
             vip_map: HashMap::new(),
@@ -222,7 +170,7 @@ impl VpnTunnel {
     }
 
     async fn send_keepalives(&self) {
-        let ka = keepalive_packet(self.our_ip);
+        let ka = self.cipher.seal(VPN_TYPE_KEEPALIVE, &self.our_ip.octets());
         let targets: Vec<SocketAddr> = self
             .seeds
             .iter()
@@ -282,9 +230,9 @@ impl VpnTunnel {
             Some(ip) => {
                 self.vip_map.insert(ip, from);
                 self.state.log(format!("🎟️ Assigned {} to {}", ip, from));
-                control_packet(VPN_TYPE_ASSIGN, &ip.octets())
+                self.cipher.seal(VPN_TYPE_ASSIGN, &ip.octets())
             }
-            None => control_packet(VPN_TYPE_ASSIGN, &[]),
+            None => self.cipher.seal(VPN_TYPE_ASSIGN, &[]),
         };
         let _ = self.socket.send_to(&reply, from).await;
     }
@@ -312,7 +260,7 @@ impl VpnTunnel {
             return;
         }
         let dst = Ipv4Addr::new(ipv4[16], ipv4[17], ipv4[18], ipv4[19]);
-        let datagram = encapsulate(ipv4);
+        let datagram = self.cipher.seal(VPN_TYPE_DATA, ipv4);
 
         let is_bcast = packet_handler::is_broadcast_or_multicast(ipv4);
         if !is_bcast {
@@ -327,9 +275,10 @@ impl VpnTunnel {
 
     /// Datagram from the network.
     async fn handle_remote_packet(&mut self, datagram: &[u8], from: SocketAddr) {
-        let Some((kind, payload)) = parse(datagram) else {
-            return;
+        let Some((kind, payload)) = self.cipher.open(datagram, &mut self.replay) else {
+            return; // not ours, wrong key, tampered or replayed
         };
+        let payload = payload.as_slice();
 
         if self.seeds.contains(&from) {
             self.last_heard_seed = Instant::now();
@@ -422,8 +371,10 @@ pub async fn request_ip(
     socket: &UdpSocket,
     hub: SocketAddr,
     client_id: [u8; 8],
+    cipher: &Cipher,
 ) -> Result<Ipv4Addr> {
-    let join = control_packet(VPN_TYPE_JOIN, &client_id);
+    let join = cipher.seal(VPN_TYPE_JOIN, &client_id);
+    let mut replay = ReplayGuard::new();
     let mut buf = [0u8; 1500];
     for _ in 0..10 {
         socket.send_to(&join, hub).await?;
@@ -431,7 +382,7 @@ pub async fn request_ip(
         while let Some(left) = deadline.checked_duration_since(Instant::now()) {
             match tokio::time::timeout(left, socket.recv_from(&mut buf)).await {
                 Ok(Ok((n, from))) if from == hub => {
-                    if let Some((VPN_TYPE_ASSIGN, p)) = parse(&buf[..n]) {
+                    if let Some((VPN_TYPE_ASSIGN, p)) = cipher.open(&buf[..n], &mut replay) {
                         if p.len() == 4 {
                             return Ok(Ipv4Addr::new(p[0], p[1], p[2], p[3]));
                         }
@@ -446,13 +397,14 @@ pub async fn request_ip(
 }
 
 /// Run as the hub (host). Blocks until shutdown.
-pub async fn run_host(state: Arc<AppState>, port: u16) -> Result<()> {
+pub async fn run_host(state: Arc<AppState>, port: u16, key: &str) -> Result<()> {
     state.set_status("⏳ Iniciando host…");
     let res = async {
+        let cipher = Arc::new(Cipher::new(key)?);
         let ip = HUB_IP.to_string();
         let tun = tokio::task::spawn_blocking(move || TunDevice::new(&ip)).await??;
         let socket = Arc::new(UdpSocket::bind(("0.0.0.0", port)).await?);
-        let mut tunnel = VpnTunnel::new(tun, socket, state.clone(), &HUB_IP.to_string())
+        let mut tunnel = VpnTunnel::new(tun, socket, state.clone(), &HUB_IP.to_string(), cipher)
             .await?
             .set_hub(true);
         tunnel.run().await
@@ -467,14 +419,18 @@ pub async fn run_host(state: Arc<AppState>, port: u16) -> Result<()> {
 }
 
 /// Run as a client: get an IP from the hub, create the adapter, tunnel. Blocks until shutdown.
-pub async fn run_client(state: Arc<AppState>, hub: SocketAddr) -> Result<()> {
+pub async fn run_client(state: Arc<AppState>, hub: SocketAddr, key: &str) -> Result<()> {
     state.set_status("⏳ Conectando con el host…");
     let res = async {
+        let cipher = Arc::new(Cipher::new(key)?);
         let socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
-        let ip = request_ip(&socket, hub, crate::vpn_config::client_id())
+        let ip = request_ip(&socket, hub, crate::vpn_config::client_id(), &cipher)
             .await
             .map_err(|e| {
-                anyhow::anyhow!("{} (¿IP y puerto correctos? ¿UDP abierto en el host?)", e)
+                anyhow::anyhow!(
+                    "{}. Revisa la dirección, que el host tenga UDP abierto y que la clave sea la misma",
+                    e
+                )
             })?;
         state.log(format!("🎟️ El host te asignó {}", ip));
         let ip_s = ip.to_string();
@@ -484,7 +440,8 @@ pub async fn run_client(state: Arc<AppState>, hub: SocketAddr) -> Result<()> {
                 anyhow::anyhow!("no se pudo crear el adaptador de red ({}). ¿Administrador?", e)
             })?;
         let mut tunnel =
-            VpnTunnel::with_peers(tun, socket, state.clone(), &ip.to_string(), vec![hub]).await?;
+            VpnTunnel::with_peers(tun, socket, state.clone(), &ip.to_string(), vec![hub], cipher)
+                .await?;
         tunnel.run().await
     }
     .await;
@@ -494,37 +451,4 @@ pub async fn run_client(state: Arc<AppState>, hub: SocketAddr) -> Result<()> {
         Err(e) => state.set_status(format!("❌ {}", e)),
     }
     res
-}
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_encapsulation_roundtrip() {
-        let mut ipv4 = vec![0u8; 40];
-        ipv4[0] = 0x45; // version 4, IHL 5
-        ipv4[16..20].copy_from_slice(&[10, 0, 0, 255]); // subnet broadcast
-
-        let datagram = encapsulate(&ipv4);
-        assert_eq!(datagram[0..3], VPN_MAGIC);
-        assert_eq!(datagram[3], VPN_VERSION);
-        assert_eq!(datagram[4], VPN_TYPE_DATA);
-
-        let payload = decapsulate(&datagram).expect("should decapsulate");
-        assert_eq!(payload, &ipv4[..]);
-    }
-
-    #[test]
-    fn test_decapsulate_rejects_garbage() {
-        assert!(decapsulate(b"HELLO:peer1").is_none());
-        assert!(decapsulate(b"PING:1234").is_none());
-        assert!(decapsulate(&[]).is_none());
-        // Wrong version / type
-        let bad = [0x4F, 0x58, 0x44, 0x02, 0x01, 0x00];
-        assert!(decapsulate(&bad).is_none());
-        let bad_type = [0x4F, 0x58, 0x44, 0x01, 0x02, 0x00];
-        assert!(decapsulate(&bad_type).is_none());
-    }
 }

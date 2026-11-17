@@ -76,6 +76,15 @@ pub fn save_host(host: &str) {
     write("last_host.txt", host.trim());
 }
 
+/// Saved shared key (empty if none).
+pub fn load_key() -> String {
+    read("key.txt").unwrap_or_default()
+}
+
+pub fn save_key(key: &str) {
+    write("key.txt", key.trim());
+}
+
 /// Hub leases: client id -> virtual IP.
 pub fn load_leases() -> HashMap<[u8; 8], Ipv4Addr> {
     let mut map = HashMap::new();
