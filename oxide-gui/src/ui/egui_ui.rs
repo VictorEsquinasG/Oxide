@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use oxide_core::app::AppState;
 use oxide_core::network::mesh_controller::MeshController;
-use oxide_core::network::vpn_tunnel::VpnTunnel;
+use oxide_core::network::vpn_tunnel::{self, VpnTunnel};
 use oxide_core::room_manager::RoomManager;
 use oxide_core::system::tun_device::TunDevice;
 
@@ -29,7 +29,7 @@ pub struct UiState {
     /// For legacy mode
     pub peer_ip: String,
     pub peer_port: String,
-    pub virtual_ip: String,
+    pub vpn_running: Arc<std::sync::atomic::AtomicBool>,
 
     /// For room creation
     pub room_name: String,
@@ -65,9 +65,9 @@ impl EguiApp {
         Self {
             state,
             ui: UiState {
-                peer_ip: String::new(),
+                peer_ip: oxide_core::vpn_config::load_host(),
                 peer_port: "9000".to_string(),
-                virtual_ip: "10.0.0.2".to_string(),
+                vpn_running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
                 room_name: String::new(),
                 player_alias: String::new(),
                 max_players: 4,
@@ -149,7 +149,7 @@ impl EguiApp {
                 self.ui.current_screen = AppScreen::JoinRoom;
             }
 
-            if ui.button("🌐 Direct VPN (Host / Join by IP)").clicked() {
+            if ui.button("🌐 Conectar (Host / Unirse)").clicked() {
                 self.ui.current_screen = AppScreen::Legacy;
             }
         });
@@ -412,107 +412,77 @@ impl EguiApp {
     }
 
     fn render_legacy_mode(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Direct VPN");
-        ui.label("One player HOSTS (forward UDP port 9000 on the router). Everyone else JOINS with the host's public IP.");
-        ui.label("Needs Administrator (Windows) / root (Linux).");
+        ui.heading("Conectar a la LAN virtual");
 
-        ui.separator();
+        let status = self.state.get_status();
+        let running = self.ui.vpn_running.load(Ordering::Relaxed);
+        if !status.is_empty() {
+            ui.label(egui::RichText::new(status).size(18.0));
+            ui.separator();
+        }
 
-        ui.horizontal(|ui| {
-            ui.label("My virtual IP (unique per player):");
-            ui.text_edit_singleline(&mut self.ui.virtual_ip);
-        });
-        ui.horizontal(|ui| {
-            ui.label("Host public IP:");
+        if !running {
+            ui.label("Dirección del host (IP o nombre):");
             ui.text_edit_singleline(&mut self.ui.peer_ip);
-        });
-        ui.horizontal(|ui| {
-            ui.label("Port:");
-            ui.text_edit_singleline(&mut self.ui.peer_port);
-        });
+            ui.label("Tu IP virtual te la asigna el host automáticamente.");
+            ui.separator();
 
-        ui.separator();
-
-        ui.horizontal(|ui| {
-            if ui.button("🏠 Host (I am 10.0.0.1)").clicked() {
-                self.ui.virtual_ip = "10.0.0.1".to_string();
-                self.start_direct_vpn(true);
-            }
-            if ui.button("🔗 Join host").clicked() {
-                if self.ui.peer_ip.is_empty() {
-                    self.state.log("❌ Host IP cannot be empty".into());
-                } else {
-                    self.start_direct_vpn(false);
+            ui.horizontal(|ui| {
+                if ui.button("🔗 Conectar").clicked() {
+                    if self.ui.peer_ip.trim().is_empty() {
+                        self.state.set_status("❌ Escribe la dirección del host");
+                    } else {
+                        self.start_direct_vpn(false);
+                    }
                 }
-            }
-            if ui.button("🛑 Stop").clicked() {
-                self.state.shutdown.store(true, Ordering::Relaxed);
-            }
-            if ui.button("↩️ Back").clicked() {
-                self.ui.current_screen = AppScreen::MainMenu;
-            }
-        });
+                if ui.button("🏠 Ser el host").clicked() {
+                    self.start_direct_vpn(true);
+                }
+                if ui.button("↩️ Volver").clicked() {
+                    self.ui.current_screen = AppScreen::MainMenu;
+                }
+            });
+        } else if ui.button("🛑 Desconectar").clicked() {
+            self.state.shutdown.store(true, Ordering::Relaxed);
+        }
     }
 
     fn start_direct_vpn(&self, hub: bool) {
         let state = self.state.clone();
-        let virtual_ip = self.ui.virtual_ip.trim().to_string();
-        let host = format!("{}:{}", self.ui.peer_ip.trim(), self.ui.peer_port.trim());
-        let port: u16 = if hub {
-            self.ui.peer_port.trim().parse().unwrap_or(9000)
-        } else {
-            9000
-        };
+        let running = self.ui.vpn_running.clone();
+        let host_text = self.ui.peer_ip.trim().to_string();
 
         state.shutdown.store(false, Ordering::Relaxed);
-        state.log(format!(
-            "🔌 Starting VPN as {} ({})",
-            virtual_ip,
-            if hub { "host".to_string() } else { format!("joining {}", host) }
-        ));
+        running.store(true, Ordering::Relaxed);
 
         tokio::spawn(async move {
-            let seeds = if hub {
-                vec![]
+            let result = if hub {
+                vpn_tunnel::run_host(state.clone(), 9000).await
             } else {
-                match tokio::net::lookup_host(&host).await {
-                    Ok(mut it) => match it.find(|a| a.is_ipv4()) {
-                        Some(a) => vec![a],
-                        None => {
-                            state.log(format!("❌ Cannot resolve {}", host));
-                            return;
-                        }
-                    },
-                    Err(e) => {
-                        state.log(format!("❌ Invalid host {}: {}", host, e));
-                        return;
+                let host = if host_text.contains(':') {
+                    host_text.clone()
+                } else {
+                    format!("{}:9000", host_text)
+                };
+                match tokio::net::lookup_host(&host)
+                    .await
+                    .ok()
+                    .and_then(|mut it| it.find(|a| a.is_ipv4()))
+                {
+                    Some(addr) => {
+                        oxide_core::vpn_config::save_host(&host_text);
+                        vpn_tunnel::run_client(state.clone(), addr).await
+                    }
+                    None => {
+                        state.set_status(format!("❌ No se encuentra el host \"{}\"", host));
+                        Ok(())
                     }
                 }
             };
-
-            let tun = match TunDevice::new(&virtual_ip) {
-                Ok(t) => t,
-                Err(e) => {
-                    state.log(format!("❌ Failed to create TUN device: {}", e));
-                    return;
-                }
-            };
-            let socket = match tokio::net::UdpSocket::bind(("0.0.0.0", port)).await {
-                Ok(s) => Arc::new(s),
-                Err(e) => {
-                    state.log(format!("❌ Cannot bind UDP port {}: {}", port, e));
-                    return;
-                }
-            };
-            match VpnTunnel::with_peers(tun, socket, state.clone(), &virtual_ip, seeds).await {
-                Ok(tunnel) => {
-                    let mut tunnel = tunnel.set_hub(hub);
-                    if let Err(e) = tunnel.run().await {
-                        state.log(format!("❌ VPN tunnel error: {}", e));
-                    }
-                }
-                Err(e) => state.log(format!("❌ Failed to create VPN tunnel: {}", e)),
+            if let Err(e) = result {
+                state.log(format!("❌ {}", e));
             }
+            running.store(false, Ordering::Relaxed);
         });
     }
 }
