@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use oxide_core::app::AppState;
 use oxide_core::network::mesh_controller::MeshController;
-use oxide_core::network::node::NetworkNode;
 use oxide_core::network::vpn_tunnel::VpnTunnel;
 use oxide_core::room_manager::RoomManager;
 use oxide_core::system::tun_device::TunDevice;
@@ -30,6 +29,7 @@ pub struct UiState {
     /// For legacy mode
     pub peer_ip: String,
     pub peer_port: String,
+    pub virtual_ip: String,
 
     /// For room creation
     pub room_name: String,
@@ -67,6 +67,7 @@ impl EguiApp {
             ui: UiState {
                 peer_ip: String::new(),
                 peer_port: "9000".to_string(),
+                virtual_ip: "10.0.0.2".to_string(),
                 room_name: String::new(),
                 player_alias: String::new(),
                 max_players: 4,
@@ -148,7 +149,7 @@ impl EguiApp {
                 self.ui.current_screen = AppScreen::JoinRoom;
             }
 
-            if ui.button("⚙️ Legacy Mode (Direct P2P)").clicked() {
+            if ui.button("🌐 Direct VPN (Host / Join by IP)").clicked() {
                 self.ui.current_screen = AppScreen::Legacy;
             }
         });
@@ -411,16 +412,20 @@ impl EguiApp {
     }
 
     fn render_legacy_mode(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Legacy Direct P2P Mode");
-        ui.label("Connect directly to another PC (old style)");
+        ui.heading("Direct VPN");
+        ui.label("One player HOSTS (forward UDP port 9000 on the router). Everyone else JOINS with the host's public IP.");
+        ui.label("Needs Administrator (Windows) / root (Linux).");
 
         ui.separator();
 
         ui.horizontal(|ui| {
-            ui.label("Peer IP:");
+            ui.label("My virtual IP (unique per player):");
+            ui.text_edit_singleline(&mut self.ui.virtual_ip);
+        });
+        ui.horizontal(|ui| {
+            ui.label("Host public IP:");
             ui.text_edit_singleline(&mut self.ui.peer_ip);
         });
-
         ui.horizontal(|ui| {
             ui.label("Port:");
             ui.text_edit_singleline(&mut self.ui.peer_port);
@@ -429,58 +434,84 @@ impl EguiApp {
         ui.separator();
 
         ui.horizontal(|ui| {
-            if ui.button("🔗 Connect").clicked() {
+            if ui.button("🏠 Host (I am 10.0.0.1)").clicked() {
+                self.ui.virtual_ip = "10.0.0.1".to_string();
+                self.start_direct_vpn(true);
+            }
+            if ui.button("🔗 Join host").clicked() {
                 if self.ui.peer_ip.is_empty() {
-                    self.state.log("❌ Peer IP cannot be empty".into());
+                    self.state.log("❌ Host IP cannot be empty".into());
                 } else {
-                    self.initiate_legacy_connection();
+                    self.start_direct_vpn(false);
                 }
             }
-
+            if ui.button("🛑 Stop").clicked() {
+                self.state.shutdown.store(true, Ordering::Relaxed);
+            }
             if ui.button("↩️ Back").clicked() {
                 self.ui.current_screen = AppScreen::MainMenu;
             }
         });
     }
 
-    fn initiate_legacy_connection(&self) {
-        let peer_ip = self.ui.peer_ip.clone();
-        let peer_port = self.ui.peer_port.clone();
+    fn start_direct_vpn(&self, hub: bool) {
         let state = self.state.clone();
+        let virtual_ip = self.ui.virtual_ip.trim().to_string();
+        let host = format!("{}:{}", self.ui.peer_ip.trim(), self.ui.peer_port.trim());
+        let port: u16 = if hub {
+            self.ui.peer_port.trim().parse().unwrap_or(9000)
+        } else {
+            9000
+        };
 
-        self.state
-            .log(format!("🔌 Connecting to {}:{}", peer_ip, peer_port));
+        state.shutdown.store(false, Ordering::Relaxed);
+        state.log(format!(
+            "🔌 Starting VPN as {} ({})",
+            virtual_ip,
+            if hub { "host".to_string() } else { format!("joining {}", host) }
+        ));
 
         tokio::spawn(async move {
-            let peer_addr: String = format!("{}:{}", peer_ip, peer_port);
-            let bind_addr = "0.0.0.0:9000";
-
-            match peer_addr.parse::<std::net::SocketAddr>() {
-                Ok(peer_socket) => match bind_addr.parse::<std::net::SocketAddr>() {
-                    Ok(bind_socket) => {
-                        match NetworkNode::new(bind_socket, peer_socket, state.clone(), "10.0.0.1")
-                            .await
-                        {
-                            Ok(node) => {
-                                state.log("✅ NetworkNode created".into());
-                                let shutdown = state.shutdown.clone();
-                                state.shutdown.store(false, Ordering::Relaxed);
-                                if let Err(e) = node.run(shutdown).await {
-                                    state.log(format!("❌ Connection error: {}", e));
-                                }
-                            }
-                            Err(e) => {
-                                state.log(format!("❌ NetworkNode error: {}", e));
-                            }
+            let seeds = if hub {
+                vec![]
+            } else {
+                match tokio::net::lookup_host(&host).await {
+                    Ok(mut it) => match it.find(|a| a.is_ipv4()) {
+                        Some(a) => vec![a],
+                        None => {
+                            state.log(format!("❌ Cannot resolve {}", host));
+                            return;
                         }
-                    }
+                    },
                     Err(e) => {
-                        state.log(format!("❌ Invalid bind address: {}", e));
+                        state.log(format!("❌ Invalid host {}: {}", host, e));
+                        return;
                     }
-                },
-                Err(e) => {
-                    state.log(format!("❌ Invalid peer address: {}", e));
                 }
+            };
+
+            let tun = match TunDevice::new(&virtual_ip) {
+                Ok(t) => t,
+                Err(e) => {
+                    state.log(format!("❌ Failed to create TUN device: {}", e));
+                    return;
+                }
+            };
+            let socket = match tokio::net::UdpSocket::bind(("0.0.0.0", port)).await {
+                Ok(s) => Arc::new(s),
+                Err(e) => {
+                    state.log(format!("❌ Cannot bind UDP port {}: {}", port, e));
+                    return;
+                }
+            };
+            match VpnTunnel::with_peers(tun, socket, state.clone(), &virtual_ip, seeds).await {
+                Ok(tunnel) => {
+                    let mut tunnel = tunnel.set_hub(hub);
+                    if let Err(e) = tunnel.run().await {
+                        state.log(format!("❌ VPN tunnel error: {}", e));
+                    }
+                }
+                Err(e) => state.log(format!("❌ Failed to create VPN tunnel: {}", e)),
             }
         });
     }
@@ -568,7 +599,7 @@ async fn spawn_vpn_tunnel(state: Arc<AppState>) -> Result<(), String> {
     state.log(format!("🌐 Creating TUN device with IP: {}", virtual_ip));
 
     // Create TUN device
-    let tun = TunDevice::get_or_create(virtual_ip.clone())
+    let tun = TunDevice::new(&virtual_ip)
         .map_err(|e| format!("Failed to create TUN device: {}", e))?;
 
     state.log("✅ TUN device created successfully".into());
