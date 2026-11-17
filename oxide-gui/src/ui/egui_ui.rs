@@ -29,6 +29,7 @@ pub struct UiState {
     /// For legacy mode
     pub peer_ip: String,
     pub peer_port: String,
+    pub vpn_key: String,
     pub vpn_running: Arc<std::sync::atomic::AtomicBool>,
 
     /// For room creation
@@ -67,6 +68,7 @@ impl EguiApp {
             ui: UiState {
                 peer_ip: oxide_core::vpn_config::load_host(),
                 peer_port: "9000".to_string(),
+                vpn_key: oxide_core::vpn_config::load_key(),
                 vpn_running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
                 room_name: String::new(),
                 player_alias: String::new(),
@@ -424,6 +426,8 @@ impl EguiApp {
         if !running {
             ui.label("Dirección del host (IP o nombre):");
             ui.text_edit_singleline(&mut self.ui.peer_ip);
+            ui.label("Clave compartida (la misma para todos, mín. 8 caracteres):");
+            ui.add(egui::TextEdit::singleline(&mut self.ui.vpn_key).password(true));
             ui.label("Tu IP virtual te la asigna el host automáticamente.");
             ui.separator();
 
@@ -431,12 +435,18 @@ impl EguiApp {
                 if ui.button("🔗 Conectar").clicked() {
                     if self.ui.peer_ip.trim().is_empty() {
                         self.state.set_status("❌ Escribe la dirección del host");
+                    } else if self.ui.vpn_key.chars().count() < 8 {
+                        self.state.set_status("❌ La clave debe tener al menos 8 caracteres");
                     } else {
                         self.start_direct_vpn(false);
                     }
                 }
                 if ui.button("🏠 Ser el host").clicked() {
-                    self.start_direct_vpn(true);
+                    if self.ui.vpn_key.chars().count() < 8 {
+                        self.state.set_status("❌ La clave debe tener al menos 8 caracteres");
+                    } else {
+                        self.start_direct_vpn(true);
+                    }
                 }
                 if ui.button("↩️ Volver").clicked() {
                     self.ui.current_screen = AppScreen::MainMenu;
@@ -451,13 +461,15 @@ impl EguiApp {
         let state = self.state.clone();
         let running = self.ui.vpn_running.clone();
         let host_text = self.ui.peer_ip.trim().to_string();
+        let key = self.ui.vpn_key.trim().to_string();
+        oxide_core::vpn_config::save_key(&key);
 
         state.shutdown.store(false, Ordering::Relaxed);
         running.store(true, Ordering::Relaxed);
 
         tokio::spawn(async move {
             let result = if hub {
-                vpn_tunnel::run_host(state.clone(), 9000).await
+                vpn_tunnel::run_host(state.clone(), 9000, &key).await
             } else {
                 let host = if host_text.contains(':') {
                     host_text.clone()
@@ -471,7 +483,7 @@ impl EguiApp {
                 {
                     Some(addr) => {
                         oxide_core::vpn_config::save_host(&host_text);
-                        vpn_tunnel::run_client(state.clone(), addr).await
+                        vpn_tunnel::run_client(state.clone(), addr, &key).await
                     }
                     None => {
                         state.set_status(format!("❌ No se encuentra el host \"{}\"", host));
@@ -589,7 +601,11 @@ async fn spawn_vpn_tunnel(state: Arc<AppState>) -> Result<(), String> {
     };
 
     // Create VPN tunnel
-    let mut vpn_tunnel = VpnTunnel::new(tun, socket, state.clone(), &virtual_ip)
+    let cipher = Arc::new(
+        oxide_core::network::crypto::Cipher::new(&oxide_core::vpn_config::load_key())
+            .map_err(|e| format!("Clave compartida: {}", e))?,
+    );
+    let mut vpn_tunnel = VpnTunnel::new(tun, socket, state.clone(), &virtual_ip, cipher)
         .await
         .map_err(|e| format!("Failed to create VPN tunnel: {}", e))?;
 

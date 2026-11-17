@@ -53,11 +53,17 @@ enum Commands {
         /// UDP port to listen on
         #[arg(long, default_value_t = 9000)]
         port: u16,
+        /// Shared key (min 8 chars). Also OXIDE_KEY env var, or the last saved key.
+        #[arg(long, env = "OXIDE_KEY")]
+        key: Option<String>,
     },
     /// Connect to a host's VPN. The host assigns your virtual IP. Needs root/Administrator.
     Connect {
         /// Host public IP or name, optionally with port (default 9000)
         host: String,
+        /// Shared key (min 8 chars). Also OXIDE_KEY env var, or the last saved key.
+        #[arg(long, env = "OXIDE_KEY")]
+        key: Option<String>,
     },
     /// Show room details and peer status
     Status {
@@ -175,8 +181,8 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::Host { port } => return run_vpn(None, *port).await,
-        Commands::Connect { host } => return run_vpn(Some(host), 0).await,
+        Commands::Host { port, key } => return run_vpn(None, *port, key.as_deref()).await,
+        Commands::Connect { host, key } => return run_vpn(Some(host), 0, key.as_deref()).await,
         _ => {}
     }
 
@@ -282,12 +288,23 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn run_vpn(join: Option<&str>, port: u16) -> anyhow::Result<()> {
+async fn run_vpn(join: Option<&str>, port: u16, key: Option<&str>) -> anyhow::Result<()> {
     use oxide_core::app::AppState;
     use oxide_core::network::vpn_tunnel;
     use std::net::ToSocketAddrs;
     use std::sync::atomic::Ordering;
     use std::sync::Arc;
+
+    let key = match key {
+        Some(k) => {
+            oxide_core::vpn_config::save_key(k);
+            k.to_string()
+        }
+        None => oxide_core::vpn_config::load_key(),
+    };
+    if key.is_empty() {
+        anyhow::bail!("falta la clave compartida: usa --key CLAVE (o la variable OXIDE_KEY)");
+    }
 
     let state = Arc::new(AppState::new("0.0.0.0".into(), "cli".into()));
     state.echo_stdout.store(true, Ordering::Relaxed);
@@ -299,7 +316,7 @@ async fn run_vpn(join: Option<&str>, port: u16) -> anyhow::Result<()> {
     });
 
     match join {
-        None => vpn_tunnel::run_host(state, port).await,
+        None => vpn_tunnel::run_host(state, port, &key).await,
         Some(host) => {
             let host = if host.contains(':') {
                 host.to_string()
@@ -311,7 +328,7 @@ async fn run_vpn(join: Option<&str>, port: u16) -> anyhow::Result<()> {
                 .find(|a| a.is_ipv4())
                 .ok_or_else(|| anyhow::anyhow!("cannot resolve {}", host))?;
             oxide_core::vpn_config::save_host(&host);
-            vpn_tunnel::run_client(state, addr).await
+            vpn_tunnel::run_client(state, addr, &key).await
         }
     }
 }
