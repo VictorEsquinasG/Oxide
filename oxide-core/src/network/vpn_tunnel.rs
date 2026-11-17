@@ -51,6 +51,8 @@ pub struct VpnTunnel {
     leases: HashMap<[u8; 8], Ipv4Addr>,
     /// Last time we heard from any seed (client liveness)
     last_heard_seed: Instant,
+    /// Rate limit for the "rejected packet" log line
+    last_reject_log: Instant,
 }
 
 impl VpnTunnel {
@@ -89,6 +91,7 @@ impl VpnTunnel {
             vip_map: HashMap::new(),
             leases: HashMap::new(),
             last_heard_seed: Instant::now(),
+            last_reject_log: Instant::now() - Duration::from_secs(60),
         })
     }
 
@@ -276,7 +279,17 @@ impl VpnTunnel {
     /// Datagram from the network.
     async fn handle_remote_packet(&mut self, datagram: &[u8], from: SocketAddr) {
         let Some((kind, payload)) = self.cipher.open(datagram, &mut self.replay) else {
-            return; // not ours, wrong key, tampered or replayed
+            // Not ours, wrong key, tampered or replayed. Log (rate limited) so a
+            // reachability test shows up even when nobody has the right key.
+            if self.last_reject_log.elapsed() >= Duration::from_secs(5) {
+                self.last_reject_log = Instant::now();
+                self.state.log(format!(
+                    "📨 Llegó un paquete UDP de {} ({} bytes) que no se pudo descifrar: clave incorrecta o no es Oxide",
+                    from,
+                    datagram.len()
+                ));
+            }
+            return;
         };
         let payload = payload.as_slice();
 
