@@ -27,6 +27,8 @@ pub struct AppState {
     pub player_id: String,
     /// P2P mesh network manager (None if not active)
     pub p2p_network: Arc<Mutex<Option<Arc<P2PNetwork>>>>,
+    /// Also print log lines to stdout (CLI mode)
+    pub echo_stdout: AtomicBool,
 }
 
 impl AppState {
@@ -51,6 +53,7 @@ impl AppState {
             shared_socket: Arc::new(Mutex::new(None)),
             current_room: Arc::new(Mutex::new(None)),
             p2p_network: Arc::new(Mutex::new(None)),
+            echo_stdout: AtomicBool::new(false),
         }
     }
 
@@ -67,6 +70,9 @@ impl AppState {
     /// Add a log message to the internal log buffer
     /// Messages are displayed in the UI and automatically trimmed to 150 items
     pub fn log(&self, message: String) {
+        if self.echo_stdout.load(Ordering::Relaxed) {
+            println!("{}", message);
+        }
         let mut logs = self.logs.lock().unwrap();
 
         logs.push(format!("> {}", message));
