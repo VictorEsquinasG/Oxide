@@ -27,3 +27,6 @@ arboard = "3.4"
 [[bin]]
 name = "oxide-gui"
 path = "src/main.rs"
+
+[build-dependencies]
+embed-resource = "3"
