@@ -47,6 +47,24 @@ enum Commands {
         /// Room ID
         id: String,
     },
+    /// Bring the VPN tunnel up (needs root on Linux, Administrator on Windows).
+    ///
+    /// Host (hub):   oxide-cli up --ip 10.0.0.1 --hub
+    /// Friend:       oxide-cli up --ip 10.0.0.2 --connect HOST_PUBLIC_IP:9000
+    Up {
+        /// Your virtual IP, unique per player (10.0.0.1 - 10.0.0.254)
+        #[arg(long)]
+        ip: String,
+        /// Hub address to connect to (host:port). Omit on the hub itself.
+        #[arg(long)]
+        connect: Option<String>,
+        /// Act as the hub: relay traffic between all players
+        #[arg(long)]
+        hub: bool,
+        /// Local UDP port (the hub must forward this port on the router)
+        #[arg(long, default_value_t = 9000)]
+        port: u16,
+    },
     /// Show room details and peer status
     Status {
         /// Room ID
@@ -161,6 +179,17 @@ async fn save_config(config: &CliConfig, path: &PathBuf) -> anyhow::Result<()> {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+
+    if let Commands::Up {
+        ip,
+        connect,
+        hub,
+        port,
+    } = &cli.command
+    {
+        return run_vpn(ip, connect.as_deref(), *hub, *port).await;
+    }
+
     let (mut cli_config, config_path) = load_or_create_config().await?;
 
     let local_ip = local_ip()
@@ -207,6 +236,7 @@ async fn main() -> anyhow::Result<()> {
             peer_id: cli_config.peer_id.clone(),
         },
         Commands::Status { id } => Command::RoomInfo { id },
+        Commands::Up { .. } => unreachable!("handled above"),
     };
 
     let mut stream = TcpStream::connect(&cli.service).await.map_err(|e| {
@@ -260,4 +290,40 @@ async fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+async fn run_vpn(ip: &str, connect: Option<&str>, hub: bool, port: u16) -> anyhow::Result<()> {
+    use oxide_core::app::AppState;
+    use oxide_core::network::vpn_tunnel::VpnTunnel;
+    use oxide_core::system::tun_device::TunDevice;
+    use std::net::ToSocketAddrs;
+    use std::sync::atomic::Ordering;
+    use std::sync::Arc;
+
+    if !hub && connect.is_none() {
+        anyhow::bail!("use --hub (you host) or --connect HOST:PORT (you join)");
+    }
+    let seeds: Vec<std::net::SocketAddr> = match connect {
+        Some(addr) => vec![addr
+            .to_socket_addrs()?
+            .find(|a| a.is_ipv4())
+            .ok_or_else(|| anyhow::anyhow!("cannot resolve {}", addr))?],
+        None => vec![],
+    };
+
+    let state = Arc::new(AppState::new("0.0.0.0".into(), "cli".into()));
+    state.echo_stdout.store(true, Ordering::Relaxed);
+    let tun = TunDevice::new(ip)?;
+    let socket = Arc::new(tokio::net::UdpSocket::bind(("0.0.0.0", port)).await?);
+    let mut tunnel = VpnTunnel::with_peers(tun, socket, state.clone(), ip, seeds)
+        .await?
+        .set_hub(hub);
+
+    let shutdown = state.shutdown.clone();
+    tokio::spawn(async move {
+        let _ = tokio::signal::ctrl_c().await;
+        shutdown.store(true, Ordering::Relaxed);
+    });
+
+    tunnel.run().await
 }
