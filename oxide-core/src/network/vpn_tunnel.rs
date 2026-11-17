@@ -398,7 +398,8 @@ pub async fn request_ip(
 
 /// Bind the hub socket on `[::]` accepting both IPv6 and IPv4 clients
 /// (IPv4 clients appear as `::ffff:a.b.c.d`). Falls back to IPv4-only.
-pub fn bind_hub_socket(port: u16) -> Result<UdpSocket> {
+/// Returns the socket and whether it is dual-stack.
+pub fn bind_hub_socket(port: u16) -> Result<(UdpSocket, bool)> {
     use socket2::{Domain, Protocol, Socket, Type};
     use std::net::{IpAddr, Ipv6Addr};
 
@@ -410,11 +411,12 @@ pub fn bind_hub_socket(port: u16) -> Result<UdpSocket> {
         UdpSocket::from_std(s.into())
     })();
     match dual {
-        Ok(sock) => Ok(sock),
-        Err(_) => {
+        Ok(sock) => Ok((sock, true)),
+        Err(e) => {
+            eprintln!("IPv6 bind failed ({}), using IPv4 only", e);
             let std_sock = std::net::UdpSocket::bind(("0.0.0.0", port))?;
             std_sock.set_nonblocking(true)?;
-            Ok(UdpSocket::from_std(std_sock)?)
+            Ok((UdpSocket::from_std(std_sock)?, false))
         }
     }
 }
@@ -448,8 +450,13 @@ pub async fn run_host(state: Arc<AppState>, port: u16, key: &str) -> Result<()> 
         let cipher = Arc::new(Cipher::new(key)?);
         let ip = HUB_IP.to_string();
         let tun = tokio::task::spawn_blocking(move || TunDevice::new(&ip)).await??;
-        let socket = Arc::new(bind_hub_socket(port)?);
-        state.log(format!("📡 Escuchando en UDP {} (IPv6 + IPv4)", port));
+        let (socket, dual) = bind_hub_socket(port)?;
+        let socket = Arc::new(socket);
+        state.log(if dual {
+            format!("📡 Escuchando en UDP {} (IPv6 + IPv4)", port)
+        } else {
+            format!("📡 Escuchando en UDP {} (solo IPv4: no se pudo abrir IPv6)", port)
+        });
         let mut tunnel = VpnTunnel::new(tun, socket, state.clone(), &HUB_IP.to_string(), cipher)
             .await?
             .set_hub(true);
