@@ -25,3 +25,6 @@ tun = "0.6"
 lazy_static = "1.4"
 pnet = { version = "0.34", optional = true }
 pnet_packet = { version = "0.34", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+wintun = "0.5"

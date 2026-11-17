@@ -46,7 +46,7 @@ pub mod linux_tun {
             Ok(LinuxTunDevice {
                 fd,
                 ip: ip.to_string(),
-                mtu: 1500,
+                mtu: 1400,
                 name: name.to_string(),
             })
         }
@@ -139,7 +139,7 @@ pub mod linux_tun {
 
             // Set MTU
             let output = Command::new("ip")
-                .args(&["link", "set", "mtu", "1500", "dev", name])
+                .args(&["link", "set", "mtu", "1400", "dev", name])
                 .output()?;
 
             if !output.status.success() {
@@ -168,16 +168,32 @@ pub mod linux_tun {
     }
 
     impl TunDeviceImpl for LinuxTunDevice {
-        fn read(&mut self) -> Result<Vec<u8>> {
-            let mut buf = vec![0u8; self.mtu as usize];
+        fn read(&self) -> Result<Vec<u8>> {
+            // Wait up to 200 ms so the reader thread can notice shutdown
+            let mut pfd = libc::pollfd {
+                fd: self.fd,
+                events: libc::POLLIN,
+                revents: 0,
+            };
+            let ready = unsafe { libc::poll(&mut pfd, 1, 200) };
+            if ready < 0 {
+                let err = std::io::Error::last_os_error();
+                if err.kind() == std::io::ErrorKind::Interrupted {
+                    return Ok(vec![]);
+                }
+                return Err(anyhow!("poll on TUN failed: {}", err));
+            }
+            if ready == 0 {
+                return Ok(vec![]);
+            }
 
+            let mut buf = vec![0u8; self.mtu as usize + 64];
             let n =
                 unsafe { libc::read(self.fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
 
             if n < 0 {
                 let err = std::io::Error::last_os_error();
                 if err.kind() == std::io::ErrorKind::WouldBlock {
-                    // No data available - not an error
                     return Ok(vec![]);
                 }
                 return Err(anyhow!("Failed to read from TUN: {}", err));
@@ -187,7 +203,7 @@ pub mod linux_tun {
             Ok(buf)
         }
 
-        fn write(&mut self, packet: &[u8]) -> Result<()> {
+        fn write(&self, packet: &[u8]) -> Result<()> {
             let n = unsafe {
                 libc::write(
                     self.fd,

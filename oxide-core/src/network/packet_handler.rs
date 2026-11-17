@@ -133,7 +133,7 @@ pub fn handle_arp_request(
     // Build the reply: swap Ethernet addresses, set ARP reply with our MAC/IP
     let mut reply = vec![0u8; 14 + 28];
     reply[0..6].copy_from_slice(&packet[6..12]); // dst = original src MAC
-    reply[6..12].copy_from_slice(our_mac); // src = our MAC
+    reply[6..12].copy_from_slice(&our_mac); // src = our MAC
     reply[12..14].copy_from_slice(&[0x08, 0x06]); // ARP ethertype
 
     reply[14..16].copy_from_slice(&arp[0..2]); // hardware type
@@ -141,10 +141,10 @@ pub fn handle_arp_request(
     reply[18] = arp[4]; // hw addr len
     reply[19] = arp[5]; // proto addr len
     reply[20..22].copy_from_slice(&2u16.to_be_bytes()); // operation = reply
-    reply[22..28].copy_from_slice(our_mac); // sender hw addr
+    reply[22..28].copy_from_slice(&our_mac); // sender hw addr
     reply[28..32].copy_from_slice(&our_ip.octets()); // sender proto addr
-    reply[34..40].copy_from_slice(&packet[22..28]); // target hw = original sender MAC
-    reply[40..44].copy_from_slice(&packet[28..32]); // target proto = original sender IP
+    reply[32..38].copy_from_slice(&packet[22..28]); // target hw = original sender MAC
+    reply[38..42].copy_from_slice(&packet[28..32]); // target proto = original sender IP
 
     Some(reply)
 }
@@ -168,7 +168,7 @@ mod tests {
         arp[8..14].copy_from_slice(&sender_mac);
         arp[14..18].copy_from_slice(&sender_ip);
         arp[18..24].copy_from_slice(&[0; 6]); // target hw unknown
-        arp[22..26].copy_from_slice(&target_ip);
+        arp[24..28].copy_from_slice(&target_ip);
         frame
     }
 

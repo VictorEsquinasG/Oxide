@@ -29,12 +29,12 @@ pub mod macos_tun {
     }
 
     impl TunDeviceImpl for MacosTunDevice {
-        fn read(&mut self) -> Result<Vec<u8>> {
+        fn read(&self) -> Result<Vec<u8>> {
             // TODO: Read from utun device
             Err(anyhow::anyhow!("macOS TUN not yet implemented"))
         }
 
-        fn write(&mut self, _packet: &[u8]) -> Result<()> {
+        fn write(&self, _packet: &[u8]) -> Result<()> {
             // TODO: Write to utun device
             Err(anyhow::anyhow!("macOS TUN not yet implemented"))
         }

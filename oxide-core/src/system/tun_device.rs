@@ -1,27 +1,18 @@
 use anyhow::Result;
-/// TUN Device abstraction for cross-platform virtual network interface
-/// Factory pattern for creating platform-specific implementations
-/// Supports Linux, macOS, and Windows (via wintun)
-use std::sync::{Arc, Mutex, Once};
+/// TUN Device abstraction for cross-platform virtual network interface.
+/// Supports Linux (/dev/net/tun), Windows (Wintun) and macOS (stub).
+use std::sync::Arc;
 
-/// Virtual TUN device interface
-#[derive(Clone)]
-pub struct TunDevice {
-    inner: Arc<TunDeviceInner>,
-}
-
-struct TunDeviceInner {
-    device: Arc<Mutex<Box<dyn TunDeviceImpl + Send + Sync>>>,
-}
-
-/// Trait for platform-specific TUN implementation
-/// Each platform (Linux, Windows, macOS) implements this
-pub trait TunDeviceImpl {
-    /// Read a packet from the TUN device
-    fn read(&mut self) -> Result<Vec<u8>>;
+/// Platform-specific TUN implementation.
+///
+/// All methods take `&self` so one thread can block in `read` while another
+/// calls `write`. Packets are bare L3 IPv4 packets (no Ethernet header).
+pub trait TunDeviceImpl: Send + Sync {
+    /// Block until a packet arrives or ~200 ms pass. Returns an empty vec on timeout.
+    fn read(&self) -> Result<Vec<u8>>;
 
     /// Write a packet to the TUN device
-    fn write(&mut self, packet: &[u8]) -> Result<()>;
+    fn write(&self, packet: &[u8]) -> Result<()>;
 
     /// Get the assigned virtual IP address
     fn get_ip(&self) -> String;
@@ -30,86 +21,59 @@ pub trait TunDeviceImpl {
     fn get_mtu(&self) -> u16;
 }
 
-static INIT: Once = Once::new();
-static mut INSTANCE: Option<TunDevice> = None;
+/// Virtual TUN device handle (cheap to clone)
+#[derive(Clone)]
+pub struct TunDevice {
+    inner: Arc<dyn TunDeviceImpl>,
+}
 
 impl TunDevice {
-    /// Factory: Create or get singleton TUN device
-    /// Platform-aware - automatically selects correct implementation
-    pub fn get_or_create(ip: String) -> Result<Self> {
-        unsafe {
-            INIT.call_once(|| {
-                INSTANCE = Self::create_platform_device(&ip).ok();
-            });
-
-            // SAFETY: INIT.call_once ensures INSTANCE is only initialized once, 
-            // and we never create a mutable reference while this shared reference exists
-            #[allow(static_mut_refs)]
-            match INSTANCE.as_ref() {
-                Some(device) => Ok(device.clone()),
-                None => Err(anyhow::anyhow!("Failed to initialize TUN device")),
-            }
-        }
+    /// Create the platform TUN device with the given virtual IP ("10.0.0.2" or "10.0.0.2/24").
+    pub fn new(ip: &str) -> Result<Self> {
+        Self::create_platform_device(ip)
     }
 
-    /// Factory method: Create platform-specific device
     #[cfg(target_os = "linux")]
     fn create_platform_device(ip: &str) -> Result<Self> {
         use crate::system::linux_tun::linux_tun::LinuxTunDevice;
-
-        let device = LinuxTunDevice::new(ip)?;
         Ok(TunDevice {
-            inner: Arc::new(TunDeviceInner {
-                device: Arc::new(Mutex::new(Box::new(device))),
-            }),
+            inner: Arc::new(LinuxTunDevice::new(ip)?),
         })
     }
 
     #[cfg(target_os = "windows")]
     fn create_platform_device(ip: &str) -> Result<Self> {
         use crate::system::windows_tun::windows_tun::WindowsTunDevice;
-
-        let device = WindowsTunDevice::new(ip)?;
         Ok(TunDevice {
-            inner: Arc::new(TunDeviceInner {
-                device: Arc::new(Mutex::new(Box::new(device))),
-            }),
+            inner: Arc::new(WindowsTunDevice::new(ip)?),
         })
     }
 
     #[cfg(target_os = "macos")]
     fn create_platform_device(ip: &str) -> Result<Self> {
         use crate::system::macos_tun::macos_tun::MacosTunDevice;
-
-        let device = MacosTunDevice::new(ip)?;
         Ok(TunDevice {
-            inner: Arc::new(TunDeviceInner {
-                device: Arc::new(Mutex::new(Box::new(device))),
-            }),
+            inner: Arc::new(MacosTunDevice::new(ip)?),
         })
     }
 
-    /// Read a packet from TUN device
-    pub async fn read(&self) -> Result<Vec<u8>> {
-        let mut device = self.inner.device.lock().unwrap();
-        device.read()
+    /// Blocking read. Call from a dedicated thread (see `VpnTunnel`).
+    pub fn read_blocking(&self) -> Result<Vec<u8>> {
+        self.inner.read()
     }
 
     /// Write a packet to TUN device
-    pub async fn write(&self, packet: &[u8]) -> Result<()> {
-        let mut device = self.inner.device.lock().unwrap();
-        device.write(packet)
+    pub fn write_blocking(&self, packet: &[u8]) -> Result<()> {
+        self.inner.write(packet)
     }
 
     /// Get virtual IP address
     pub fn get_ip(&self) -> String {
-        let device = self.inner.device.lock().unwrap();
-        device.get_ip()
+        self.inner.get_ip()
     }
 
     /// Get MTU
     pub fn get_mtu(&self) -> u16 {
-        let device = self.inner.device.lock().unwrap();
-        device.get_mtu()
+        self.inner.get_mtu()
     }
 }
