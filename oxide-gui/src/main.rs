@@ -10,6 +10,20 @@ use std::sync::Arc;
 use std::thread;
 use ui::egui_ui::EguiApp;
 
+/// The GUI has no console on Windows, so errors would be invisible.
+/// Write them to a log file and show a dialog (rfd needs no GPU).
+fn report_fatal(msg: &str) {
+    let dir = oxide_core::vpn_config::config_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    let log = dir.join("oxide-gui.log");
+    let _ = std::fs::write(&log, msg);
+    rfd::MessageDialog::new()
+        .set_title("Oxide")
+        .set_level(rfd::MessageLevel::Error)
+        .set_description(format!("{}\n\n(Detalles en {})", msg, log.display()))
+        .show();
+}
+
 fn load_icon() -> IconData {
     let (icon_rgba, icon_width, icon_height) = {
         // Nota: include_bytes! es relativo al archivo actual (main.rs)
@@ -73,38 +87,48 @@ async fn main() -> eframe::Result<()> {
     // Store room_manager in Arc to pass to app_creator closure
     let room_mgr_arc = room_manager.clone();
 
-    let create_native_options = || {
-        let mut options = eframe::NativeOptions {
+    std::panic::set_hook(Box::new(|info| {
+        report_fatal(&format!("Oxide se cerró por un error interno:\n{}", info));
+    }));
+
+    // Try the modern renderer first, then OpenGL. OXIDE_RENDERER=glow|wgpu forces one.
+    let order: Vec<eframe::Renderer> = match std::env::var("OXIDE_RENDERER").as_deref() {
+        Ok("glow") => vec![eframe::Renderer::Glow],
+        Ok("wgpu") => vec![eframe::Renderer::Wgpu],
+        _ => vec![eframe::Renderer::Wgpu, eframe::Renderer::Glow],
+    };
+
+    let mut errors = Vec::new();
+    for renderer in order {
+        let name = format!("{:?}", renderer);
+        let options = eframe::NativeOptions {
             viewport: egui::ViewportBuilder::default()
                 .with_title("Oxide")
                 .with_icon(load_icon()),
+            renderer,
             ..Default::default()
         };
-        // Use wgpu as primary renderer for better cross-platform support
-        // wgpu provides Vulkan/DirectX/Metal abstraction, better Windows/Linux compatibility
-        // Fallback to Glow only if wgpu is unavailable
-        options.renderer = eframe::Renderer::Wgpu;
-        options
-    };
-
-    let app_state = state.clone();
-    let app_creator = Box::new(
-        move |_cc: &eframe::CreationContext<'_>| -> Box<dyn eframe::App> {
-            let mut app = EguiApp::new(app_state.clone());
-            app.ui.room_manager = room_mgr_arc.clone();
-            Box::new(app)
-        },
-    );
-
-    match eframe::run_native("Mini LAN Bridge", create_native_options(), app_creator) {
-        Ok(result) => Ok(result),
-        Err(err) => {
-            eprintln!("Failed to start GUI: {}", err);
-            eprintln!(
-                "This may be due to missing graphics drivers or running in a headless environment."
-            );
-            eprintln!("Please ensure your system has proper graphics support.");
-            Err(err)
+        let app_state = state.clone();
+        let room_mgr_arc = room_manager.clone();
+        let app_creator = Box::new(
+            move |_cc: &eframe::CreationContext<'_>| -> Box<dyn eframe::App> {
+                let mut app = EguiApp::new(app_state.clone());
+                app.ui.room_manager = room_mgr_arc.clone();
+                Box::new(app)
+            },
+        );
+        match eframe::run_native("Mini LAN Bridge", options, app_creator) {
+            Ok(()) => return Ok(()),
+            Err(err) => {
+                eprintln!("Renderer {} failed: {}", name, err);
+                errors.push(format!("{}: {}", name, err));
+            }
         }
     }
+
+    report_fatal(&format!(
+        "No se pudo abrir la ventana: no hay gráficos compatibles (¿máquina virtual sin GPU?).\n\n{}\n\nAlternativa sin ventana: oxide-cli.exe connect HOST --key CLAVE (como Administrador).",
+        errors.join("\n")
+    ));
+    Ok(())
 }
